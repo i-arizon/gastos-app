@@ -313,10 +313,11 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 6px; }
 .status-box { margin: 4px 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--chip-bg); font-size: 14px; }
 .status-box.error { color: var(--danger); }
 .cat-list { list-style: none; margin: 0 0 12px; padding: 0; }
-.cat-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.cat-list .swipe { border-bottom: 1px solid var(--border); }
+.cat-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 0; }
 .cat-row .cat-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.cat-row .count { font-size: 13px; color: var(--text-2); }
-.cat-row .btn { padding: 0 10px; font-size: 14px; }
+.cat-row .count { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.cat-list .swipe-actions button { width: 100px; }
 .inline-form { display: flex; gap: 8px; align-items: center; }
 .inline-form input[type="text"] { flex: 1; min-width: 0; }
 
@@ -406,14 +407,14 @@ dialog p[data-message]:empty { display: none; }
 .calc-result { flex: 1; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); overflow-wrap: anywhere; }
 
 /* ---------- Deslizar para editar o borrar ---------- */
-.swipe { position: relative; }
-.swipe .exp-item {
+.swipe { position: relative; overflow: hidden; }
+.swipe .swipe-front {
   position: relative; z-index: 1;
   background-color: var(--card);
   touch-action: pan-y; /* el navegador hace el scroll vertical; el horizontal lo gestiona la app */
   transition: transform .22s ease, box-shadow .1s ease;
 }
-.swipe.dragging .exp-item { transition: none; }
+.swipe.dragging .swipe-front { transition: none; }
 /* Ocultos con la fila cerrada (si no, asoma un borde rojo); se esconden al acabar de cerrarse. */
 .swipe-actions {
   position: absolute; top: 0; right: 0; bottom: 0; display: flex;

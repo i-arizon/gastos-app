@@ -21,7 +21,7 @@ Hecha con HTML, CSS y JavaScript (módulos ES) sin framework ni paso de compilac
 | **Añadir** | Formulario rápido (concepto, importe con teclado numérico y coma decimal, fecha, categoría) y los últimos 10 gastos. El importe admite operaciones (`12,50+3,20`, `45÷3`) con la barra + − × ÷ que aparece bajo el campo. |
 | **Gastos** | Todos los gastos agrupados por mes, con buscador y filtro por categoría. Toca uno para editarlo, o deslízalo a la izquierda para *Editar* / *Eliminar*. Tira hacia abajo desde arriba del todo para sincronizar (envía lo pendiente y descarga los cambios de la hoja). |
 | **Análisis** | *Mensual:* total y variación frente al mes anterior, donut y tabla por categoría, top 5 y gasto acumulado diario. *Anual:* total y media mensual, barras por mes, barras apiladas por categoría, tabla anual, evolución de las categorías que elijas y matriz mes × categoría. |
-| **Ajustes** | Conexión con Google Sheets, sincronizar ahora, restaurar, gestión de categorías (añadir, renombrar, color, eliminar con reasignación) y copia CSV. |
+| **Ajustes** | Conexión con Google Sheets, sincronizar ahora, restaurar, gestión de categorías (añadir, cambiar color tocando la muestra, y deslizar a la izquierda para *Renombrar* o *Eliminar* con reasignación de sus gastos) y copia CSV. |
 
 ## Estructura
 

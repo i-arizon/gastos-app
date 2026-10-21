@@ -297,34 +297,38 @@ function expenseItem(e) {
       <button type="button" class="swipe-edit" data-swipe="edit" tabindex="-1">Editar</button>
       <button type="button" class="swipe-delete" data-swipe="delete" tabindex="-1">Eliminar</button>
     </div>
-    <button type="button" class="exp-item" data-id="${esc(e.id)}">
+    <button type="button" class="exp-item swipe-front" data-id="${esc(e.id)}">
     <span class="exp-dot" style="background:${colorOf(e.category)}"></span>
     <span class="exp-main"><span class="exp-name">${esc(e.name)}</span>
       <span class="exp-meta">${esc(e.category)} · ${fmtDate(e.date)}</span></span>
     <span class="exp-amount">${fmtEUR(e.amount)}</span></button></li>`;
 }
 
-/* ---------- Deslizar para editar o borrar ---------- */
-const SWIPE_OPEN = 152; // ancho de los dos botones
+/* ---------- Deslizar para ver acciones (gastos y categorías) ---------- */
+// Estructura: <li class="swipe"><div class="swipe-actions">[data-swipe]…</div><… class="swipe-front">…</li>
 let openRow = null;
+
+const swipeWidth = (row) => $('.swipe-actions', row).offsetWidth; // ancho de los botones de detrás
 
 function closeSwipe(row = openRow) {
   if (!row) return;
-  $('.exp-item', row).style.transform = '';
+  $('.swipe-front', row).style.transform = '';
   row.classList.remove('open');
   if (row === openRow) openRow = null;
 }
 
-function setupSwipe(container) {
-  let row = null, startX = 0, startY = 0, base = 0, dx = 0, dragging = false;
+// onAction(acción, fila) se llama al pulsar uno de los botones que aparecen al deslizar.
+function setupSwipe(container, onAction) {
+  let row = null, startX = 0, startY = 0, base = 0, dx = 0, width = 0, dragging = false;
 
   container.addEventListener('pointerdown', (ev) => {
-    const item = ev.target.closest('.swipe .exp-item');
-    if (!item || ev.button > 0) return;
-    if (openRow && openRow !== item.parentElement) closeSwipe();
-    row = item.parentElement;
+    const front = ev.target.closest('.swipe .swipe-front');
+    if (!front || ev.button > 0) return;
+    if (openRow && openRow !== front.parentElement) closeSwipe();
+    row = front.parentElement;
+    width = swipeWidth(row);
     startX = ev.clientX; startY = ev.clientY;
-    base = row.classList.contains('open') ? -SWIPE_OPEN : 0;
+    base = row.classList.contains('open') ? -width : 0;
     dx = 0; dragging = false;
   });
 
@@ -337,8 +341,8 @@ function setupSwipe(container) {
       dragging = true;
       row.classList.add('dragging');
     }
-    dx = Math.max(-SWIPE_OPEN - 40, Math.min(0, base + mx));
-    $('.exp-item', row).style.transform = `translateX(${dx}px)`;
+    dx = Math.max(-width - 40, Math.min(0, base + mx));
+    $('.swipe-front', row).style.transform = `translateX(${dx}px)`;
   });
 
   const end = () => {
@@ -346,13 +350,13 @@ function setupSwipe(container) {
     row.classList.remove('dragging');
     if (dragging) {
       // Se abre si se desliza más de un tercio; si no, vuelve a su sitio.
-      if (dx < -SWIPE_OPEN / 3) {
-        $('.exp-item', row).style.transform = `translateX(${-SWIPE_OPEN}px)`;
+      if (dx < -width / 3) {
+        $('.swipe-front', row).style.transform = `translateX(${-width}px)`;
         row.classList.add('open');
         openRow = row;
       } else closeSwipe(row);
       const swiped = row;
-      swiped.dataset.justSwiped = '1'; // evita que el "click" de soltar abra la edición
+      swiped.dataset.justSwiped = '1'; // evita que el "click" de soltar abra la edición o el color
       setTimeout(() => { delete swiped.dataset.justSwiped; }, 350);
     }
     row = null;
@@ -363,18 +367,23 @@ function setupSwipe(container) {
   container.addEventListener('click', (ev) => {
     const li = ev.target.closest('.swipe');
     if (!li) return;
-    const id = $('.exp-item', li).dataset.id;
     const action = ev.target.closest('[data-swipe]')?.dataset.swipe;
     if (action) {
       closeSwipe(li);
-      if (action === 'edit') openEdit(id);
-      else confirmDelete(id);
+      onAction(action, li);
     } else if (li.dataset.justSwiped || li.classList.contains('open')) {
+      ev.preventDefault();
       ev.stopImmediatePropagation();
       if (!li.dataset.justSwiped) closeSwipe(li); // tocar una fila abierta la cierra
     }
   }, true);
 }
+
+const onExpenseSwipe = (action, li) => {
+  const id = $('.exp-item', li).dataset.id;
+  if (action === 'edit') openEdit(id);
+  else confirmDelete(id);
+};
 
 // Tocar fuera de una fila abierta la cierra.
 document.addEventListener('pointerdown', (ev) => {
@@ -551,59 +560,64 @@ async function setupSyncSettings() {
 function renderCatSettings() {
   const counts = {};
   state.expenses.forEach((e) => { counts[e.category] = (counts[e.category] || 0) + 1; });
+  // Renombrar/Eliminar quedan detrás de cada fila y aparecen al deslizar a la izquierda.
   $('#cat-list').innerHTML = state.categories.map((c) => `
-    <li class="cat-row" data-name="${esc(c.name)}">
-      <input type="color" value="${c.color}" data-act="color" aria-label="Color de ${esc(c.name)}">
-      <span class="cat-name">${esc(c.name)} <span class="count">${counts[c.name] || 0}</span></span>
-      <button type="button" class="btn" data-act="rename">Renombrar</button>
-      <button type="button" class="btn danger" data-act="delete">Eliminar</button>
+    <li class="swipe" data-name="${esc(c.name)}">
+      <div class="swipe-actions">
+        <button type="button" class="swipe-edit" data-swipe="rename" tabindex="-1">Renombrar</button>
+        <button type="button" class="swipe-delete" data-swipe="delete" tabindex="-1">Eliminar</button>
+      </div>
+      <div class="cat-row swipe-front">
+        <input type="color" value="${c.color}" data-act="color" aria-label="Color de ${esc(c.name)}">
+        <span class="cat-name">${esc(c.name)}</span>
+        <span class="count">${counts[c.name] || 0} ${counts[c.name] === 1 ? 'gasto' : 'gastos'}</span>
+      </div>
     </li>`).join('');
 }
 
 const nameTaken = (name, except) =>
   state.categories.some((c) => c.name !== except && normalizeText(c.name) === normalizeText(name));
 
+async function renameCategoryFlow(name) {
+  const newName = await ask({ title: 'Renombrar categoría', input: { value: name }, okText: 'Renombrar' });
+  if (!newName || newName === name) return;
+  if (nameTaken(newName, name)) return toast('Ya existe una categoría con ese nombre', 'error');
+  const moved = await db.renameCategory(name, newName);
+  toast(`Categoría renombrada${moved ? ` · ${moved} gastos actualizados` : ''}`);
+  await afterChange();
+}
+
+async function deleteCategoryFlow(name) {
+  if (state.categories.length <= 1) return toast('Debe quedar al menos una categoría', 'error');
+  const count = state.expenses.filter((e) => e.category === name).length;
+  let target = null;
+  if (count) {
+    target = await ask({
+      title: `Eliminar «${name}»`,
+      message: `Tiene ${count} gasto(s). ¿A qué categoría quieres moverlos?`,
+      select: { options: state.categories.filter((c) => c.name !== name).map((c) => c.name) },
+      okText: 'Mover y eliminar', danger: true,
+    });
+    if (!target) return;
+  } else if (!(await ask({ title: `¿Eliminar «${name}»?`, okText: 'Eliminar', danger: true }))) {
+    return;
+  }
+  await db.deleteCategory(name, target);
+  toast('Categoría eliminada');
+  await afterChange();
+}
+
 function setupCategorySettings() {
   const list = $('#cat-list');
   list.addEventListener('change', async (ev) => {
     if (ev.target.dataset.act !== 'color') return;
-    await db.updateCategoryColor(ev.target.closest('.cat-row').dataset.name, ev.target.value);
+    await db.updateCategoryColor(ev.target.closest('.swipe').dataset.name, ev.target.value);
     await loadData();
   });
 
-  list.addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('button[data-act]');
-    if (!btn) return;
-    const name = btn.closest('.cat-row').dataset.name;
-    const count = state.expenses.filter((e) => e.category === name).length;
-
-    if (btn.dataset.act === 'rename') {
-      const newName = await ask({ title: 'Renombrar categoría', input: { value: name }, okText: 'Renombrar' });
-      if (!newName || newName === name) return;
-      if (nameTaken(newName, name)) return toast('Ya existe una categoría con ese nombre', 'error');
-      const moved = await db.renameCategory(name, newName);
-      toast(`Categoría renombrada${moved ? ` · ${moved} gastos actualizados` : ''}`);
-      await afterChange();
-    }
-
-    if (btn.dataset.act === 'delete') {
-      if (state.categories.length <= 1) return toast('Debe quedar al menos una categoría', 'error');
-      let target = null;
-      if (count) {
-        target = await ask({
-          title: `Eliminar «${name}»`,
-          message: `Tiene ${count} gasto(s). ¿A qué categoría quieres moverlos?`,
-          select: { options: state.categories.filter((c) => c.name !== name).map((c) => c.name) },
-          okText: 'Mover y eliminar', danger: true,
-        });
-        if (!target) return;
-      } else if (!(await ask({ title: `¿Eliminar «${name}»?`, okText: 'Eliminar', danger: true }))) {
-        return;
-      }
-      await db.deleteCategory(name, target);
-      toast('Categoría eliminada');
-      await afterChange();
-    }
+  setupSwipe(list, (action, li) => {
+    if (action === 'rename') renameCategoryFlow(li.dataset.name);
+    else deleteCategoryFlow(li.dataset.name);
   });
 
   $('#cat-add-form').addEventListener('submit', async (ev) => {
@@ -842,8 +856,8 @@ async function init() {
   $('#search').addEventListener('input', renderList);
   $('#filter-cat').addEventListener('change', renderList);
 
-  setupSwipe($('#recent-list'));
-  setupSwipe($('#month-groups'));
+  setupSwipe($('#recent-list'), onExpenseSwipe);
+  setupSwipe($('#month-groups'), onExpenseSwipe);
   setupPullToSync();
 
   setupAddForm();
