@@ -82,5 +82,6 @@ tools/make_icons.py Generador de los iconos (Python, sin dependencias)
 
 - Los datos viven en el iPhone. Si borras los datos de Safari o desinstalas la app, usa **Restaurar desde Google Sheets** (o importa un CSV).
 - Si se cambia un gasto en dos dispositivos, gana el cambio más reciente (`updatedAt`).
-- El token viaja en la URL de la petición de restauración (HTTPS). Usa un token largo y no lo compartas. Si se filtra, cámbialo en Propiedades del script y en Ajustes.
+- La app envía el token siempre dentro del cuerpo de la petición (HTTPS), nunca en la URL, para que no quede en registros. Usa un token largo y no lo compartas. Si se filtra, cámbialo en Propiedades del script y en Ajustes.
+- La app pide al navegador almacenamiento persistente para que iOS no borre los datos locales.
 - Para regenerar los iconos: `python tools/make_icons.py`.

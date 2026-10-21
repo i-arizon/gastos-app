@@ -631,6 +631,9 @@ async function init() {
 
   sync.startAutoSync();
   setupServiceWorker();
+
+  // Pide que el navegador no borre los datos locales por falta de espacio o de uso.
+  navigator.storage?.persist?.().catch(() => {});
 }
 
 init().catch((err) => {

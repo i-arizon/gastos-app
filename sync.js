@@ -56,12 +56,16 @@ async function post(url, payload) {
   } catch (err) { throw netError(err); }
 }
 
-async function get(url, params) {
-  const u = new URL(url);
-  Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
+// Lecturas (list/ping) también por POST: el token va en el cuerpo y no queda en registros de URL.
+async function read(url, token, action) {
   try {
-    return await parseResponse(await fetch(u, { redirect: 'follow' }));
-  } catch (err) { throw netError(err); }
+    return await post(url, { token, action });
+  } catch (err) {
+    if (/Acción no válida/.test(err.message)) {
+      throw new Error('Actualiza el código del Apps Script e implementa una nueva versión');
+    }
+    throw err;
+  }
 }
 
 // Recalcula el estado sin enviar nada (p. ej. al guardar un gasto offline).
@@ -122,7 +126,7 @@ async function doSync() {
 export async function ping() {
   const { url, token } = await getConfig();
   if (!url || !token) throw new Error('Introduce la URL y el token');
-  return get(url, { token, action: 'ping' });
+  return read(url, token, 'ping');
 }
 
 // Normaliza una fila devuelta por la hoja.
@@ -144,7 +148,7 @@ function normalizeRemote(r) {
 export async function restore() {
   const { url, token } = await getConfig();
   if (!url || !token) throw new Error('Configura primero la URL y el token');
-  const data = await get(url, { token });
+  const data = await read(url, token, 'list');
   const remote = (data.expenses || []).map(normalizeRemote).filter(Boolean);
   const result = await db.mergeExpenses(remote, { fromServer: true });
   await db.ensureCategories(remote.filter((e) => !e.deleted).map((e) => e.category));

@@ -1,15 +1,19 @@
 /**
+ * @OnlyCurrentDoc
  * Gastos — backend de sincronización con Google Sheets (Google Apps Script).
+ * @OnlyCurrentDoc limita el permiso a esta hoja (no a todas tus hojas de Drive).
  *
  * Despliegue: Implementar > Nueva implementación > Aplicación web
  *   - Ejecutar como: Yo
  *   - Quién tiene acceso: Cualquier usuario
  * Guarda el token en Configuración del proyecto > Propiedades del script con la clave TOKEN.
  *
- * POST (cuerpo JSON enviado como text/plain):
+ * POST (cuerpo JSON enviado como text/plain; el token va en el cuerpo, no en la URL):
  *   { "token": "...", "action": "upsert" | "delete", "expenses": [ {id, date, name, amount, category, createdAt, updatedAt, deleted}, ... ] }
- * GET:
- *   ?token=...               -> todos los gastos (incluidos los borrados)
+ *   { "token": "...", "action": "list" }   -> todos los gastos (incluidos los borrados)
+ *   { "token": "...", "action": "ping" }   -> comprobación de conexión
+ * GET (alternativa manual; la app usa POST para no dejar el token en los registros):
+ *   ?token=...               -> todos los gastos
  *   ?token=...&action=ping   -> comprobación de conexión
  */
 
@@ -25,6 +29,7 @@ function doPost(e) {
     checkToken_(body.token);
 
     var action = body.action;
+    if (action === 'list' || action === 'ping') return readResponse_(action);
     if (action !== 'upsert' && action !== 'delete') throw new Error('Acción no válida: ' + action);
     var list = Array.isArray(body.expenses) ? body.expenses : (body.expense ? [body.expense] : []);
     if (!list.length) throw new Error('No se han recibido gastos');
@@ -46,27 +51,33 @@ function doGet(e) {
   try {
     var params = (e && e.parameter) || {};
     checkToken_(params.token);
-
-    var rows = readRows_();
-    if (params.action === 'ping') return json_({ status: 'ok', count: rows.length });
-
-    var tz = Session.getScriptTimeZone();
-    var expenses = rows.map(function (r) {
-      return {
-        id: String(r[0]),
-        date: toDateString_(r[1], tz),
-        name: String(r[2]),
-        amount: Number(r[3]) || 0,
-        category: String(r[4]),
-        createdAt: toTimestamp_(r[5]),
-        updatedAt: toTimestamp_(r[6]),
-        deleted: r[7] === true || String(r[7]).toUpperCase() === 'TRUE',
-      };
-    });
-    return json_({ status: 'ok', count: expenses.length, expenses: expenses });
+    return readResponse_(params.action === 'ping' ? 'ping' : 'list');
   } catch (err) {
     return json_({ status: 'error', message: String((err && err.message) || err) });
   }
+}
+
+/* ---------- Lectura ---------- */
+
+// 'ping' devuelve solo el número de filas; 'list' devuelve todos los gastos.
+function readResponse_(action) {
+  var rows = readRows_();
+  if (action === 'ping') return json_({ status: 'ok', count: rows.length });
+
+  var tz = Session.getScriptTimeZone();
+  var expenses = rows.map(function (r) {
+    return {
+      id: String(r[0]),
+      date: toDateString_(r[1], tz),
+      name: String(r[2]),
+      amount: Number(r[3]) || 0,
+      category: String(r[4]),
+      createdAt: toTimestamp_(r[5]),
+      updatedAt: toTimestamp_(r[6]),
+      deleted: r[7] === true || String(r[7]).toUpperCase() === 'TRUE',
+    };
+  });
+  return json_({ status: 'ok', count: expenses.length, expenses: expenses });
 }
 
 /* ---------- Escritura ---------- */
@@ -134,7 +145,7 @@ function toRow_(exp, forceDeleted) {
   ];
 }
 
-/* ---------- Lectura y utilidades ---------- */
+/* ---------- Utilidades ---------- */
 
 function readRows_() {
   var sheet = getSheet_();
