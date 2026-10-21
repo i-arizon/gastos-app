@@ -112,9 +112,22 @@ function ask({ title, message = '', input = null, select = null, okText = 'Acept
 }
 
 /* ---------- Formularios de gasto ---------- */
+const USAGE_DAYS = 90;
+
+// Categorías ordenadas por nº de gastos de los últimos 90 días; a igualdad, el orden de Ajustes.
+function categoriesByUsage() {
+  const since = new Date(Date.now() - USAGE_DAYS * 864e5);
+  const sinceISO = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}`;
+  const uses = {};
+  for (const e of state.expenses) {
+    if (e.date >= sinceISO) uses[e.category] = (uses[e.category] || 0) + 1;
+  }
+  return [...state.categories].sort((a, b) => (uses[b.name] || 0) - (uses[a.name] || 0) || a.order - b.order);
+}
+
 function renderCatGrid(container, selected) {
   if (selected === undefined) selected = $('input:checked', container)?.value;
-  container.innerHTML = state.categories.map((c) => `
+  container.innerHTML = categoriesByUsage().map((c) => `
     <label class="cat-chip" style="--c:${c.color}">
       <input type="radio" name="category" value="${esc(c.name)}" ${c.name === selected ? 'checked' : ''}>
       <span>${esc(c.name)}</span>
@@ -127,6 +140,7 @@ function readForm(form) {
     amount: evalAmount(form.elements.amount.value),
     date: form.elements.date.value,
     category: $('input[name="category"]:checked', form)?.value || '',
+    tag: form.elements.tag.value.trim(),
   };
 }
 
@@ -213,6 +227,7 @@ function resetAddForm() {
   const form = $('#add-form');
   form.elements.name.value = '';
   form.elements.amount.value = '';
+  form.elements.tag.value = '';
   form.elements.date.value = todayISO();
   $$('input[name="category"]', form).forEach((r) => { r.checked = false; });
   clearValidation(form);
@@ -271,6 +286,7 @@ function openEdit(id) {
   const form = $('#edit-form');
   form.dataset.id = id;
   form.elements.name.value = exp.name;
+  form.elements.tag.value = exp.tag || '';
   form.elements.amount.value = String(exp.amount).replace('.', ',');
   form.elements.date.value = exp.date;
   // Si la categoría ya no existe, se muestra igualmente para no perderla.
@@ -300,7 +316,7 @@ function expenseItem(e) {
     <button type="button" class="exp-item swipe-front" data-id="${esc(e.id)}">
     <span class="exp-dot" style="background:${colorOf(e.category)}"></span>
     <span class="exp-main"><span class="exp-name">${esc(e.name)}</span>
-      <span class="exp-meta">${esc(e.category)} · ${fmtDate(e.date)}</span></span>
+      <span class="exp-meta">${esc(e.category)} · ${fmtDate(e.date)}${e.tag ? ` <span class="tag-pill">${esc(e.tag)}</span>` : ''}</span></span>
     <span class="exp-amount">${fmtEUR(e.amount)}</span></button></li>`;
 }
 
@@ -397,9 +413,13 @@ function renderRecent() {
     : '<li class="empty">Aún no hay gastos. ¡Añade el primero!</li>';
 }
 
+// Etiquetas usadas, de la más reciente a la más antigua.
+const allTags = () => [...new Set(state.expenses.filter((e) => e.tag).map((e) => e.tag))];
+
 function renderNameSuggestions() {
   const names = [...new Set(state.expenses.slice(0, 300).map((e) => e.name))].slice(0, 60);
   $('#name-suggestions').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join('');
+  $('#tag-suggestions').innerHTML = allTags().slice(0, 30).map((t) => `<option value="${esc(t)}">`).join('');
 }
 
 function renderFilterOptions() {
@@ -409,13 +429,24 @@ function renderFilterOptions() {
   sel.innerHTML = '<option value="">Todas las categorías</option>' +
     names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   sel.value = names.includes(current) ? current : '';
+
+  // El filtro de etiquetas solo aparece si se ha usado alguna.
+  const tagSel = $('#filter-tag');
+  const tags = allTags();
+  const currentTag = tagSel.value;
+  tagSel.innerHTML = '<option value="">Todas las etiquetas</option>' +
+    tags.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  tagSel.value = tags.includes(currentTag) ? currentTag : '';
+  tagSel.hidden = !tags.length;
 }
 
 function renderList() {
   const q = normalizeText($('#search').value.trim());
   const cat = $('#filter-cat').value;
+  const tag = $('#filter-tag').value;
   const items = state.expenses.filter((e) =>
-    (!cat || e.category === cat) && (!q || normalizeText(`${e.name} ${e.category}`).includes(q)));
+    (!cat || e.category === cat) && (!tag || e.tag === tag) &&
+    (!q || normalizeText(`${e.name} ${e.category} ${e.tag || ''}`).includes(q)));
 
   const groups = new Map();
   for (const e of items) {
@@ -435,13 +466,15 @@ function renderList() {
 
 /* ---------- Análisis ---------- */
 function renderStats() {
-  const monthly = state.statsMode === 'month';
-  $('#stats-month').hidden = !monthly;
-  $('#stats-year').hidden = monthly;
-  $$('.segmented button').forEach((b) => b.classList.toggle('active', b.dataset.mode === state.statsMode));
+  const mode = state.statsMode;
+  $('#stats-month').hidden = mode !== 'month';
+  $('#stats-year').hidden = mode !== 'year';
+  $('#stats-tags').hidden = mode !== 'tags';
+  $$('.segmented button').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  if (mode === 'tags') return renderTagsTable();
   if (!window.Chart) toast('No se pudo cargar Chart.js (¿sin conexión la primera vez?)', 'error');
   const ctx = { expenses: state.expenses, categories: state.categories, colorOf, onOpen: openEdit };
-  if (monthly) {
+  if (mode === 'month') {
     $('#month-input').value = state.month;
     renderMonthly({ ...ctx, ym: state.month });
   } else {
@@ -450,7 +483,47 @@ function renderStats() {
   }
 }
 
+// Una fila por etiqueta: total, nº de gastos, fechas y la categoría con más gasto.
+function renderTagsTable() {
+  const groups = new Map();
+  for (const e of state.expenses) {
+    if (!e.tag) continue;
+    if (!groups.has(e.tag)) groups.set(e.tag, []);
+    groups.get(e.tag).push(e);
+  }
+  const table = $('#tags-table');
+  if (!groups.size) {
+    table.innerHTML = '<tbody><tr><td class="muted">Aún no has usado etiquetas. Escribe una en el campo «Etiqueta» al apuntar un gasto, por ejemplo «Viaje Lisboa».</td></tr></tbody>';
+    return;
+  }
+  // state.expenses va por fecha descendente: la primera etiqueta es la más reciente.
+  table.innerHTML = `
+    <thead><tr><th>Etiqueta</th><th>Total</th><th>Nº</th></tr></thead>
+    <tbody>${[...groups].map(([tag, list]) => {
+      const dates = list.map((e) => e.date).sort();
+      const range = dates[0] === dates[dates.length - 1] ? fmtDate(dates[0]) : `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1])}`;
+      const byCat = {};
+      list.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+      const [topCat, topAmount] = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+      return `<tr class="tag-row" data-tag="${esc(tag)}">
+        <td><span class="tag-pill">${esc(tag)}</span><div class="muted small">${range} · más gasto en ${esc(topCat)} (${fmtEUR(topAmount)})</div></td>
+        <td>${fmtEUR(sum(list))}</td><td>${list.length}</td></tr>`;
+    }).join('')}</tbody>`;
+}
+
+// Abre la pestaña Gastos filtrada por esa etiqueta.
+function showTag(tag) {
+  $('#search').value = '';
+  $('#filter-cat').value = '';
+  $('#filter-tag').value = tag;
+  showView('list');
+}
+
 function setupStats() {
+  $('#tags-table').addEventListener('click', (ev) => {
+    const row = ev.target.closest('.tag-row');
+    if (row) showTag(row.dataset.tag);
+  });
   $$('.segmented button').forEach((b) => b.addEventListener('click', () => {
     state.statsMode = b.dataset.mode;
     renderStats();
@@ -855,6 +928,7 @@ async function init() {
   $('#month-groups').addEventListener('click', onListClick);
   $('#search').addEventListener('input', renderList);
   $('#filter-cat').addEventListener('change', renderList);
+  $('#filter-tag').addEventListener('change', renderList);
 
   setupSwipe($('#recent-list'), onExpenseSwipe);
   setupSwipe($('#month-groups'), onExpenseSwipe);

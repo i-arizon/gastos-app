@@ -1,5 +1,6 @@
 // db.js — Capa de datos local en IndexedDB (fuente de verdad de la app).
 // Stores: expenses (gastos), categories, queue (cambios pendientes de sincronizar), settings.
+// Un gasto: { id, date, name, amount, category, tag, createdAt, updatedAt, deleted }; tag puede ser ''.
 import { uuid } from './utils.js';
 
 const DB_NAME = 'gastos-db';
@@ -79,6 +80,7 @@ export async function saveExpense(data) {
     name: data.name.trim(),
     amount: data.amount,
     category: data.category,
+    tag: (data.tag || '').trim(), // etiqueta opcional (p. ej. "Lisboa 2026")
     createdAt: existing?.createdAt || ts,
     updatedAt: ts,
     deleted: false,

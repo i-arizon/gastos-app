@@ -1,7 +1,7 @@
 // csv.js — Exportación/importación CSV (separador ";" y UTF-8 con BOM para Excel en español).
 import { fmtDate, isISODate, normalizeText, parseAmount, uuid } from './utils.js';
 
-const HEADER = ['id', 'fecha', 'nombre', 'importe', 'categoria', 'creado', 'actualizado'];
+const HEADER = ['id', 'fecha', 'nombre', 'importe', 'categoria', 'etiqueta', 'creado', 'actualizado'];
 
 function cell(v) {
   const s = String(v ?? '');
@@ -12,7 +12,7 @@ export function toCSV(list) {
   const lines = [HEADER.join(';')];
   for (const e of list) {
     lines.push([e.id, fmtDate(e.date), e.name, e.amount.toFixed(2).replace('.', ','),
-      e.category, e.createdAt, e.updatedAt].map(cell).join(';'));
+      e.category, e.tag || '', e.createdAt, e.updatedAt].map(cell).join(';'));
   }
   return '﻿' + lines.join('\r\n') + '\r\n';
 }
@@ -47,6 +47,7 @@ const ALIASES = {
   name: ['nombre', 'name', 'concepto'],
   amount: ['importe', 'amount', 'cantidad'],
   category: ['categoria', 'category'],
+  tag: ['etiqueta', 'tag'],
   createdAt: ['creado', 'createdat'],
   updatedAt: ['actualizado', 'updatedat'],
 };
@@ -83,6 +84,7 @@ export function parseCSV(text) {
       id: get('id') || uuid(),
       date, name, amount,
       category: get('category') || 'Otros',
+      tag: get('tag'),
       createdAt: get('createdAt') || ts,
       updatedAt: get('updatedAt') || ts,
       deleted: false,

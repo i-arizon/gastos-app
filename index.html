@@ -55,10 +55,15 @@
           <legend>Categoría</legend>
           <div class="cat-grid" data-cat-grid></div>
         </fieldset>
+        <label class="field">
+          <span>Etiqueta <span class="optional">(opcional)</span></span>
+          <input type="text" name="tag" placeholder="Ej. Viaje Lisboa" list="tag-suggestions" autocapitalize="sentences" maxlength="40" enterkeyhint="done">
+        </label>
         <p class="form-error" data-error hidden></p>
         <button class="btn primary big" type="submit">Guardar gasto</button>
       </form>
       <datalist id="name-suggestions"></datalist>
+      <datalist id="tag-suggestions"></datalist>
 
       <h2 class="section-title">Últimos gastos</h2>
       <ul id="recent-list" class="expense-list card"></ul>
@@ -69,6 +74,7 @@
       <div class="filters">
         <input type="search" id="search" placeholder="Buscar por concepto…" autocomplete="off" enterkeyhint="search">
         <select id="filter-cat" aria-label="Filtrar por categoría"></select>
+        <select id="filter-tag" aria-label="Filtrar por etiqueta" hidden></select>
       </div>
       <p id="list-summary" class="muted small"></p>
       <div id="month-groups"></div>
@@ -79,6 +85,7 @@
       <div class="segmented" role="tablist">
         <button type="button" data-mode="month" class="active">Mensual</button>
         <button type="button" data-mode="year">Anual</button>
+        <button type="button" data-mode="tags">Etiquetas</button>
       </div>
 
       <div id="stats-month">
@@ -130,6 +137,14 @@
         <div class="card">
           <h3>Matriz mes × categoría <span class="muted small">(€, sin decimales)</span></h3>
           <div class="table-wrap matrix-wrap"><table id="y-matrix" class="table matrix"></table></div>
+        </div>
+      </div>
+
+      <div id="stats-tags" hidden>
+        <div class="card">
+          <h3>Gasto por etiqueta</h3>
+          <p class="muted small">Toca una etiqueta para ver sus gastos.</p>
+          <div class="table-wrap"><table id="tags-table" class="table tags-table"></table></div>
         </div>
       </div>
     </section>
@@ -243,6 +258,10 @@
         <legend>Categoría</legend>
         <div class="cat-grid" data-cat-grid></div>
       </fieldset>
+      <label class="field">
+        <span>Etiqueta <span class="optional">(opcional)</span></span>
+        <input type="text" name="tag" list="tag-suggestions" autocapitalize="sentences" maxlength="40">
+      </label>
       <p class="form-error" data-error hidden></p>
       <div class="btn-row">
         <button type="button" class="btn danger" data-act="delete">Eliminar</button>

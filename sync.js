@@ -138,6 +138,7 @@ function normalizeRemote(r) {
     name: String(r.name ?? ''),
     amount: Math.round(Number(String(r.amount).replace(',', '.')) * 100) / 100 || 0,
     category: String(r.category ?? 'Otros'),
+    tag: String(r.tag ?? '').trim(),
     createdAt: String(r.createdAt || r.updatedAt || ''),
     updatedAt: String(r.updatedAt || ''),
     deleted: r.deleted === true || String(r.deleted).toLowerCase() === 'true',

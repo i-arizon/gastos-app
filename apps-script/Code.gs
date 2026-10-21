@@ -9,7 +9,7 @@
  * Guarda el token en Configuración del proyecto > Propiedades del script con la clave TOKEN.
  *
  * POST (cuerpo JSON enviado como text/plain; el token va en el cuerpo, no en la URL):
- *   { "token": "...", "action": "upsert" | "delete", "expenses": [ {id, date, name, amount, category, createdAt, updatedAt, deleted}, ... ] }
+ *   { "token": "...", "action": "upsert" | "delete", "expenses": [ {id, date, name, amount, category, createdAt, updatedAt, deleted, tag}, ... ] }
  *   { "token": "...", "action": "list" }   -> todos los gastos (incluidos los borrados)
  *   { "token": "...", "action": "ping" }   -> comprobación de conexión
  * GET (alternativa manual; la app usa POST para no dejar el token en los registros):
@@ -18,9 +18,10 @@
  */
 
 var SHEET_NAME = 'Gastos';
-var HEADERS = ['id', 'date', 'name', 'amount', 'category', 'createdAt', 'updatedAt', 'deleted'];
+// 'tag' va al final para no mover las columnas de hojas ya existentes.
+var HEADERS = ['id', 'date', 'name', 'amount', 'category', 'createdAt', 'updatedAt', 'deleted', 'tag'];
 // Texto plano para id/fecha/nombre/categoría/timestamps: evita que Sheets convierta las fechas.
-var FORMATS = ['@', '@', '@', '#,##0.00', '@', '@', '@', '@'];
+var FORMATS = ['@', '@', '@', '#,##0.00', '@', '@', '@', '@', '@'];
 var UPDATED_AT_COL = 6; // índice (base 0) de updatedAt
 
 function doPost(e) {
@@ -75,6 +76,7 @@ function readResponse_(action) {
       createdAt: toTimestamp_(r[5]),
       updatedAt: toTimestamp_(r[6]),
       deleted: r[7] === true || String(r[7]).toUpperCase() === 'TRUE',
+      tag: String(r[8] || ''),
     };
   });
   return json_({ status: 'ok', count: expenses.length, expenses: expenses });
@@ -142,6 +144,7 @@ function toRow_(exp, forceDeleted) {
     String(exp.createdAt || ''),
     String(exp.updatedAt || new Date().toISOString()),
     forceDeleted || exp.deleted === true ? 'TRUE' : 'FALSE',
+    String(exp.tag || ''),
   ];
 }
 
@@ -162,6 +165,9 @@ function getSheet_() {
     sheet = ss.insertSheet(SHEET_NAME);
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
     sheet.setFrozenRows(1);
+  } else if (sheet.getRange(1, HEADERS.length).getValue() !== HEADERS[HEADERS.length - 1]) {
+    // Hoja creada con una versión anterior: añade la cabecera de la columna nueva (tag).
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
   }
   return sheet;
 }

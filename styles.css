@@ -231,7 +231,7 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 6px; }
 .empty { padding: 20px 16px 20px 0; color: var(--text-2); text-align: center; }
 
 .filters { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 8px; }
-@media (min-width: 520px) { .filters { grid-template-columns: 1.5fr 1fr; } }
+@media (min-width: 520px) { .filters { grid-template-columns: 1.5fr 1fr 1fr; } }
 #list-summary { margin: 4px 4px 12px; }
 .month-group h3 {
   display: flex; justify-content: space-between;
@@ -241,7 +241,7 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 6px; }
 
 /* ---------- Análisis ---------- */
 .segmented {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
   padding: 3px; margin-bottom: 12px;
   background: var(--chip-bg); border-radius: 12px;
 }
@@ -444,3 +444,18 @@ dialog p[data-message]:empty { display: none; }
 #ptr.busy .ptr-icon { font-size: 0; }
 #ptr.busy .ptr-icon::before { font-size: 18px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Etiquetas ---------- */
+.optional { font-weight: 400; }
+.tag-pill {
+  display: inline-block; max-width: 100%; vertical-align: baseline;
+  padding: 1px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
+  font-size: 12px; font-weight: 600; line-height: 1.5;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.exp-meta .tag-pill { margin-left: 4px; max-width: 140px; }
+.tags-table td:first-child { white-space: normal; }
+.tags-table td { vertical-align: top; }
+.tag-row { cursor: pointer; }
+.tag-row:active td { background-color: var(--press); }
