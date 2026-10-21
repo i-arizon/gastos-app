@@ -54,6 +54,9 @@ function kpi(label, value, sub = '', wide = false) {
     <div class="k-value">${value}</div>${sub ? `<div class="k-sub">${sub}</div>` : ''}</div>`;
 }
 
+// Suma los primeros n meses de un array de 12.
+const sumMonths = (perMonth, n) => perMonth.slice(0, n).reduce((a, b) => a + b, 0);
+
 const swatch = (color) => `<span class="swatch" style="background:${color}"></span>`;
 
 /* ======================= Vista mensual ======================= */
@@ -160,9 +163,6 @@ export function renderMonthly({ expenses, colorOf, ym }) {
 export function renderAnnual({ expenses, categories, colorOf, year }) {
   const list = expenses.filter((e) => e.date.startsWith(`${year}-`));
   const total = sum(list);
-  // Meses transcurridos para la media: el año en curso cuenta hasta el mes actual.
-  const months = year === currentYear() ? new Date().getMonth() + 1 : 12;
-  const avg = total / months;
 
   const monthly = new Array(12).fill(0);
   const matrix = new Map(); // categoría -> [12]
@@ -175,9 +175,20 @@ export function renderAnnual({ expenses, categories, colorOf, year }) {
   const byCat = aggregateByCategory(list);
   const maxMonth = monthly.indexOf(Math.max(...monthly));
 
+  // Media mensual solo con meses completos: el mes en curso, a medias, bajaría la media.
+  // Si aún no hay ninguno completo (enero del año actual), se usa el mes en curso.
+  const curYear = currentYear();
+  const completed = year < curYear ? 12 : year === curYear ? new Date().getMonth() : 0;
+  const avgMonths = completed || 1;
+  const avgOf = (perMonth) => sumMonths(perMonth, completed || 12) / avgMonths;
+  const avg = avgOf(monthly);
+  const avgLabel = completed === 12 ? 'Sobre 12 meses'
+    : completed ? `Sobre ${completed} ${completed === 1 ? 'mes completo' : 'meses completos'}`
+    : 'Mes en curso (aún no hay meses completos)';
+
   $('y-kpis').innerHTML =
-    kpi(`Total ${year}`, fmtEUR(total), `${list.length} gastos`, true) +
-    kpi('Media mensual', fmtEUR(avg), `Sobre ${months} ${months === 1 ? 'mes' : 'meses'}`) +
+    kpi(`Total ${year}`, fmtEUR(total), `${list.length} gasto${list.length === 1 ? '' : 's'}`, true) +
+    kpi('Media mensual', fmtEUR(avg), avgLabel) +
     kpi('Mes con más gasto', total ? MONTHS[maxMonth] : '—', total ? fmtEUR(monthly[maxMonth]) : '');
 
   const t = theme();
@@ -217,7 +228,7 @@ export function renderAnnual({ expenses, categories, colorOf, year }) {
   $('y-cat-table').innerHTML = byCat.length ? `
     <thead><tr><th>Categoría</th><th>Importe</th><th>%</th><th>Media/mes</th></tr></thead>
     <tbody>${byCat.map((c) => `<tr><td>${swatch(colorOf(c.name))}${esc(c.name)}</td>
-      <td>${fmtEUR(c.total)}</td><td>${fmtPct((c.total / total) * 100)}</td><td>${fmtEUR(c.total / months)}</td></tr>`).join('')}</tbody>
+      <td>${fmtEUR(c.total)}</td><td>${fmtPct((c.total / total) * 100)}</td><td>${fmtEUR(avgOf(matrix.get(c.name)))}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Total</td><td>${fmtEUR(total)}</td><td>100 %</td><td>${fmtEUR(avg)}</td></tr></tfoot>`
     : '<tbody><tr><td class="muted">No hay gastos este año</td></tr></tbody>';
 

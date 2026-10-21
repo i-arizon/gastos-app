@@ -1,6 +1,6 @@
 // sw.js — Service worker: cachea el app shell y Chart.js para uso offline.
 // IMPORTANTE: sube VERSION en cada publicación para que los iPhone descarguen la nueva versión.
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const CACHE = `gastos-${VERSION}`;
 const CHART_URL = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
 const SHELL = [
