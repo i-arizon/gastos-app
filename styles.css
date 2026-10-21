@@ -199,7 +199,6 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 6px; }
   border: 0; border-radius: 10px;
   cursor: pointer; text-decoration: none;
 }
-.btn:active { opacity: .7; }
 .btn:disabled { opacity: .5; }
 .btn.primary { background: var(--accent); color: var(--accent-contrast); }
 .btn.danger { color: var(--danger); }
@@ -224,7 +223,6 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 6px; }
   min-height: 60px; padding: 10px 16px 10px 0;
   background: none; border: 0; color: inherit; text-align: left; font: inherit; cursor: pointer;
 }
-.exp-item:active { opacity: .6; }
 .exp-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; }
 .exp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .exp-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -378,3 +376,24 @@ dialog p[data-message]:empty { display: none; }
   background: var(--card); box-shadow: 0 6px 24px rgba(0,0,0,.2);
   font-size: 15px;
 }
+
+/* ---------- Respuesta al tocar ---------- */
+/* En iOS, :active solo se activa al tocar porque app.js escucha touchstart. */
+:root { --press: rgba(0, 0, 0, .08); --press-filter: brightness(.88); }
+@media (prefers-color-scheme: dark) {
+  :root { --press: rgba(255, 255, 255, .14); --press-filter: brightness(1.25); }
+}
+.btn, .icon-btn, .sync-pill, .chip, .segmented button, .tabbar button, .tabbar svg,
+.exp-item, .cat-chip span, input[type="color"] {
+  transition: transform .1s ease, filter .1s ease, background-color .1s ease;
+  touch-action: manipulation;
+}
+/* Botones con fondo: se encogen un poco y se oscurecen (o aclaran en modo oscuro). */
+.btn:not(:disabled):active, .icon-btn:active, .sync-pill:active, .chip:active,
+.cat-chip:active span, input[type="color"]:active {
+  transform: scale(.96);
+  filter: var(--press-filter);
+}
+/* Elementos sin fondo: se sombrean mientras el dedo está apoyado. */
+.exp-item:active, .segmented button:active, .tabbar button:active { background-color: var(--press); }
+.tabbar button:active svg { transform: scale(.88); }

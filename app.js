@@ -636,6 +636,8 @@ function onListClick(ev) {
 }
 
 async function init() {
+  // Sin un listener de touchstart, Safari en iOS no aplica :active y los botones no reaccionan al tocar.
+  document.addEventListener('touchstart', () => {}, { passive: true });
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
   $('#recent-list').addEventListener('click', onListClick);
   $('#month-groups').addEventListener('click', onListClick);
