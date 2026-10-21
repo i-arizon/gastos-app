@@ -4,7 +4,7 @@ import * as sync from './sync.js';
 import { renderMonthly, renderAnnual } from './charts.js';
 import { toCSV, parseCSV } from './csv.js';
 import {
-  fmtEUR, fmtDate, todayISO, currentYM, currentYear, shiftMonth, monthLabel, parseAmount,
+  fmtEUR, fmtDate, todayISO, currentYM, currentYear, shiftMonth, monthLabel, evalAmount, hasOperator,
   isISODate, escapeHTML as esc, normalizeText, sum, byDateDesc,
 } from './utils.js';
 
@@ -124,7 +124,7 @@ function renderCatGrid(container, selected) {
 function readForm(form) {
   return {
     name: form.elements.name.value.trim(),
-    amount: parseAmount(form.elements.amount.value),
+    amount: evalAmount(form.elements.amount.value),
     date: form.elements.date.value,
     category: $('input[name="category"]:checked', form)?.value || '',
   };
@@ -146,6 +146,62 @@ function validate(form, data) {
   err.hidden = !errors.length;
   err.textContent = errors.length ? `Falta ${errors.join(', ')}.` : '';
   return !errors.length;
+}
+
+// Barra de operaciones bajo el importe (el teclado decimal del iPhone no tiene + − × ÷).
+// Muestra el resultado mientras se escribe y lo deja como importe al salir del campo.
+function setupCalculator(form) {
+  const input = form.elements.amount;
+  input.closest('.row2').insertAdjacentHTML('afterend', `
+    <div class="calc-bar" hidden>
+      ${['+', '−', '×', '÷'].map((op) => `<button type="button" class="btn" data-op="${op}" aria-label="${op}">${op}</button>`).join('')}
+      <span class="calc-result" aria-live="polite"></span>
+    </div>`);
+  const bar = input.closest('.row2').nextElementSibling;
+  const result = $('.calc-result', bar);
+
+  const preview = () => {
+    if (!hasOperator(input.value)) { result.textContent = ''; return; }
+    const v = evalAmount(input.value);
+    result.textContent = isNaN(v) ? '= …' : `= ${fmtEUR(v)}`;
+  };
+  input.addEventListener('input', preview);
+  input.addEventListener('focus', () => { bar.hidden = false; preview(); });
+  input.addEventListener('blur', () => {
+    // Pequeña espera: al pulsar un operador el foco vuelve al campo.
+    setTimeout(() => {
+      if (document.activeElement === input) return;
+      bar.hidden = true;
+      const v = evalAmount(input.value);
+      if (hasOperator(input.value) && !isNaN(v)) input.value = String(v).replace('.', ',');
+    }, 200);
+  });
+  // preventDefault evita que el campo pierda el foco (y se cierre el teclado) al pulsar.
+  bar.addEventListener('pointerdown', (ev) => { if (ev.target.closest('[data-op]')) ev.preventDefault(); });
+  bar.addEventListener('click', (ev) => {
+    const op = ev.target.closest('[data-op]')?.dataset.op;
+    if (!op) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.setRangeText(op, start, end, 'end');
+    input.focus();
+    preview();
+  });
+}
+
+// Pide confirmación y borra (desde el diálogo de edición o deslizando en la lista).
+async function confirmDelete(id) {
+  const exp = state.expenses.find((e) => e.id === id);
+  if (!exp) return;
+  const ok = await ask({
+    title: '¿Eliminar gasto?',
+    message: `${exp.name} · ${fmtEUR(exp.amount)} · ${fmtDate(exp.date)}`,
+    okText: 'Eliminar', danger: true,
+  });
+  if (!ok) return;
+  await db.deleteExpense(id);
+  toast('Gasto eliminado');
+  await afterChange();
 }
 
 function clearValidation(form) {
@@ -202,19 +258,9 @@ function setupEditDialog() {
     await afterChange();
   });
   $('[data-act="cancel"]', form).addEventListener('click', () => dlg.close());
-  $('[data-act="delete"]', form).addEventListener('click', async () => {
-    const id = form.dataset.id;
+  $('[data-act="delete"]', form).addEventListener('click', () => {
     dlg.close();
-    const exp = state.expenses.find((e) => e.id === id);
-    const ok = await ask({
-      title: '¿Eliminar gasto?',
-      message: `${exp.name} · ${fmtEUR(exp.amount)} · ${fmtDate(exp.date)}`,
-      okText: 'Eliminar', danger: true,
-    });
-    if (!ok) return;
-    await db.deleteExpense(id);
-    toast('Gasto eliminado');
-    await afterChange();
+    confirmDelete(form.dataset.id);
   });
   form.addEventListener('input', (ev) => ev.target.classList.remove('invalid'));
 }
@@ -244,13 +290,96 @@ async function afterChange() {
 }
 
 /* ---------- Listas ---------- */
+// Cada fila lleva detrás los botones Editar/Eliminar, que aparecen al deslizar a la izquierda.
 function expenseItem(e) {
-  return `<li><button type="button" class="exp-item" data-id="${esc(e.id)}">
+  return `<li class="swipe">
+    <div class="swipe-actions">
+      <button type="button" class="swipe-edit" data-swipe="edit" tabindex="-1">Editar</button>
+      <button type="button" class="swipe-delete" data-swipe="delete" tabindex="-1">Eliminar</button>
+    </div>
+    <button type="button" class="exp-item" data-id="${esc(e.id)}">
     <span class="exp-dot" style="background:${colorOf(e.category)}"></span>
     <span class="exp-main"><span class="exp-name">${esc(e.name)}</span>
       <span class="exp-meta">${esc(e.category)} · ${fmtDate(e.date)}</span></span>
     <span class="exp-amount">${fmtEUR(e.amount)}</span></button></li>`;
 }
+
+/* ---------- Deslizar para editar o borrar ---------- */
+const SWIPE_OPEN = 152; // ancho de los dos botones
+let openRow = null;
+
+function closeSwipe(row = openRow) {
+  if (!row) return;
+  $('.exp-item', row).style.transform = '';
+  row.classList.remove('open');
+  if (row === openRow) openRow = null;
+}
+
+function setupSwipe(container) {
+  let row = null, startX = 0, startY = 0, base = 0, dx = 0, dragging = false;
+
+  container.addEventListener('pointerdown', (ev) => {
+    const item = ev.target.closest('.swipe .exp-item');
+    if (!item || ev.button > 0) return;
+    if (openRow && openRow !== item.parentElement) closeSwipe();
+    row = item.parentElement;
+    startX = ev.clientX; startY = ev.clientY;
+    base = row.classList.contains('open') ? -SWIPE_OPEN : 0;
+    dx = 0; dragging = false;
+  });
+
+  container.addEventListener('pointermove', (ev) => {
+    if (!row) return;
+    const mx = ev.clientX - startX, my = ev.clientY - startY;
+    if (!dragging) {
+      if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { row = null; return; } // es scroll vertical
+      if (Math.abs(mx) < 10) return;
+      dragging = true;
+      row.classList.add('dragging');
+    }
+    dx = Math.max(-SWIPE_OPEN - 40, Math.min(0, base + mx));
+    $('.exp-item', row).style.transform = `translateX(${dx}px)`;
+  });
+
+  const end = () => {
+    if (!row) return;
+    row.classList.remove('dragging');
+    if (dragging) {
+      // Se abre si se desliza más de un tercio; si no, vuelve a su sitio.
+      if (dx < -SWIPE_OPEN / 3) {
+        $('.exp-item', row).style.transform = `translateX(${-SWIPE_OPEN}px)`;
+        row.classList.add('open');
+        openRow = row;
+      } else closeSwipe(row);
+      const swiped = row;
+      swiped.dataset.justSwiped = '1'; // evita que el "click" de soltar abra la edición
+      setTimeout(() => { delete swiped.dataset.justSwiped; }, 350);
+    }
+    row = null;
+  };
+  container.addEventListener('pointerup', end);
+  container.addEventListener('pointercancel', end);
+
+  container.addEventListener('click', (ev) => {
+    const li = ev.target.closest('.swipe');
+    if (!li) return;
+    const id = $('.exp-item', li).dataset.id;
+    const action = ev.target.closest('[data-swipe]')?.dataset.swipe;
+    if (action) {
+      closeSwipe(li);
+      if (action === 'edit') openEdit(id);
+      else confirmDelete(id);
+    } else if (li.dataset.justSwiped || li.classList.contains('open')) {
+      ev.stopImmediatePropagation();
+      if (!li.dataset.justSwiped) closeSwipe(li); // tocar una fila abierta la cierra
+    }
+  }, true);
+}
+
+// Tocar fuera de una fila abierta la cierra.
+document.addEventListener('pointerdown', (ev) => {
+  if (openRow && !openRow.contains(ev.target)) closeSwipe();
+});
 
 function renderRecent() {
   const list = state.expenses.slice(0, 10);
@@ -629,6 +758,75 @@ function setupServiceWorker() {
   });
 }
 
+/* ---------- Tirar hacia abajo para sincronizar ---------- */
+const PULL_TRIGGER = 64; // px que hay que bajar para que se active
+
+// Envía lo pendiente y descarga los cambios de la hoja.
+async function pullSync() {
+  if (!(await sync.isConfigured())) return toast('Configura la sincronización en Ajustes', 'error');
+  try {
+    await sync.syncNow();
+    if (sync.getState().status === 'error') throw new Error(sync.getState().message);
+    const r = await sync.restore();
+    await loadData();
+    const changes = r.added + r.updated;
+    toast(changes ? `Sincronizado · ${changes} cambio${changes === 1 ? '' : 's'} descargado${changes === 1 ? '' : 's'}` : 'Todo al día');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function setupPullToSync() {
+  const ptr = $('#ptr');
+  const text = $('.ptr-text', ptr);
+  let startY = null, startX = 0, pull = 0, pulling = false, busy = false;
+
+  const setPull = (px) => {
+    pull = px;
+    ptr.style.height = `${px}px`;
+    ptr.classList.toggle('ready', px >= PULL_TRIGGER);
+    text.textContent = px >= PULL_TRIGGER ? 'Suelta para sincronizar' : 'Desliza para sincronizar';
+  };
+
+  document.addEventListener('touchstart', (ev) => {
+    startY = null;
+    if (busy || window.scrollY > 0 || ev.touches.length > 1 || $$('dialog').some((d) => d.open)) return;
+    startY = ev.touches[0].clientY;
+    startX = ev.touches[0].clientX;
+    pulling = false;
+  }, { passive: true });
+
+  // No pasivo: hay que poder cancelar el desplazamiento mientras se tira.
+  document.addEventListener('touchmove', (ev) => {
+    if (startY === null) return;
+    const dy = ev.touches[0].clientY - startY;
+    const dx = ev.touches[0].clientX - startX;
+    if (!pulling) {
+      if (dy > 10 && dy > Math.abs(dx) && window.scrollY <= 0) {
+        pulling = true;
+        ptr.classList.add('dragging');
+      } else if (Math.abs(dx) > 10 || dy < -10) { startY = null; return; } else return;
+    }
+    if (ev.cancelable) ev.preventDefault();
+    setPull(Math.min(Math.max(0, dy - 10) * 0.5, 96)); // resistencia, como en iOS
+  }, { passive: false });
+
+  document.addEventListener('touchend', async () => {
+    if (startY === null || !pulling) { startY = null; return; }
+    startY = null;
+    ptr.classList.remove('dragging');
+    if (pull < PULL_TRIGGER) return setPull(0);
+    busy = true;
+    ptr.classList.add('busy');
+    setPull(48);
+    text.textContent = 'Sincronizando…';
+    await pullSync();
+    ptr.classList.remove('busy');
+    busy = false;
+    setPull(0);
+  });
+}
+
 /* ---------- Inicio ---------- */
 function onListClick(ev) {
   const item = ev.target.closest('.exp-item');
@@ -644,8 +842,14 @@ async function init() {
   $('#search').addEventListener('input', renderList);
   $('#filter-cat').addEventListener('change', renderList);
 
+  setupSwipe($('#recent-list'));
+  setupSwipe($('#month-groups'));
+  setupPullToSync();
+
   setupAddForm();
+  setupCalculator($('#add-form'));
   setupEditDialog();
+  setupCalculator($('#edit-form'));
   setupStats();
   setupCategorySettings();
   setupBackup();

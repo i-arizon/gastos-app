@@ -66,6 +66,48 @@ export function parseAmount(raw) {
   return Math.round(parseFloat(s) * 100) / 100;
 }
 
+// Calculadora del importe: "12,50+3,20", "45/3", "2×(3+4)". Sin operadores equivale a parseAmount.
+export const hasOperator = (raw) => /[+\-*/×÷−()]/.test(String(raw ?? '').trim().replace(/^-/, ''));
+
+export function evalAmount(raw) {
+  const s = String(raw ?? '').replace(/[\s€ ]/g, '')
+    .replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+  if (!hasOperator(s)) return parseAmount(s);
+  const tokens = s.match(/\d[\d.,]*|[+\-*/()]/g);
+  if (!tokens || tokens.join('') !== s) return NaN;
+  let i = 0;
+  const peek = () => tokens[i];
+  // Análisis por precedencia: expr = term (± term)*, term = factor (×÷ factor)*
+  const factor = () => {
+    const t = tokens[i++];
+    if (t === '(') {
+      const v = expr();
+      if (tokens[i++] !== ')') throw new Error();
+      return v;
+    }
+    if (t === '-') return -factor();
+    const v = parseAmount(t);
+    if (isNaN(v)) throw new Error();
+    return v;
+  };
+  const term = () => {
+    let v = factor();
+    while (peek() === '*' || peek() === '/') v = tokens[i++] === '*' ? v * factor() : v / factor();
+    return v;
+  };
+  const expr = () => {
+    let v = term();
+    while (peek() === '+' || peek() === '-') v = tokens[i++] === '+' ? v + term() : v - term();
+    return v;
+  };
+  try {
+    const v = expr();
+    return i === tokens.length && isFinite(v) ? Math.round(v * 100) / 100 : NaN;
+  } catch {
+    return NaN;
+  }
+}
+
 export function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
   const b = crypto.getRandomValues(new Uint8Array(16));

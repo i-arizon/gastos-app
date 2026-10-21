@@ -395,5 +395,51 @@ dialog p[data-message]:empty { display: none; }
   filter: var(--press-filter);
 }
 /* Elementos sin fondo: se sombrean mientras el dedo está apoyado. */
-.exp-item:active, .segmented button:active, .tabbar button:active { background-color: var(--press); }
+.segmented button:active, .tabbar button:active { background-color: var(--press); }
+/* Las filas usan una sombra interior: su fondo opaco tapa los botones de deslizar. */
+.exp-item:active { box-shadow: inset 0 0 0 100vmax var(--press); }
 .tabbar button:active svg { transform: scale(.88); }
+
+/* ---------- Calculadora del importe ---------- */
+.calc-bar { display: flex; align-items: center; gap: 6px; margin: -4px 0 14px; }
+.calc-bar .btn { min-width: 48px; padding: 0; font-size: 22px; font-weight: 500; }
+.calc-result { flex: 1; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); overflow-wrap: anywhere; }
+
+/* ---------- Deslizar para editar o borrar ---------- */
+.swipe { position: relative; }
+.swipe .exp-item {
+  position: relative; z-index: 1;
+  background-color: var(--card);
+  touch-action: pan-y; /* el navegador hace el scroll vertical; el horizontal lo gestiona la app */
+  transition: transform .22s ease, box-shadow .1s ease;
+}
+.swipe.dragging .exp-item { transition: none; }
+/* Ocultos con la fila cerrada (si no, asoma un borde rojo); se esconden al acabar de cerrarse. */
+.swipe-actions {
+  position: absolute; top: 0; right: 0; bottom: 0; display: flex;
+  visibility: hidden; transition: visibility 0s .22s;
+}
+.swipe.open .swipe-actions, .swipe.dragging .swipe-actions { visibility: visible; transition: none; }
+.swipe-actions button {
+  width: 76px; border: 0; color: #fff;
+  font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.swipe-edit { background: #8e8e93; }
+.swipe-delete { background: #e5383b; }
+.swipe-actions button:active { filter: brightness(.85); }
+
+/* ---------- Tirar para sincronizar ---------- */
+#ptr {
+  height: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: var(--text-2); font-size: 14px; font-weight: 600;
+  transition: height .2s ease;
+}
+#ptr.dragging { transition: none; }
+.ptr-icon { display: inline-block; font-size: 18px; transition: transform .2s ease; }
+#ptr.ready .ptr-icon { transform: rotate(180deg); }
+#ptr.busy .ptr-icon { animation: spin .8s linear infinite; }
+#ptr.busy .ptr-icon::before { content: "⟳"; }
+#ptr.busy .ptr-icon { font-size: 0; }
+#ptr.busy .ptr-icon::before { font-size: 18px; }
+@keyframes spin { to { transform: rotate(360deg); } }
