@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gastos</title>
+  <meta name="description" content="Control de gastos personales">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+
+  <!-- PWA / iOS -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gastos">
+
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous" defer></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="view-title">Añadir gasto</h1>
+    <button id="sync-indicator" class="sync-pill" data-status="idle" type="button" aria-label="Estado de sincronización">
+      <span class="dot"></span><span class="label">…</span>
+    </button>
+  </header>
+
+  <main>
+    <!-- ===== Añadir ===== -->
+    <section id="view-add" class="view active" data-title="Añadir gasto">
+      <form id="add-form" class="card expense-form" novalidate autocomplete="off">
+        <label class="field">
+          <span>Concepto</span>
+          <input type="text" name="name" placeholder="Ej. Mercadona" list="name-suggestions" autocapitalize="sentences" enterkeyhint="next" maxlength="120">
+        </label>
+        <div class="row2">
+          <label class="field">
+            <span>Importe (€)</span>
+            <input type="text" name="amount" inputmode="decimal" placeholder="0,00" enterkeyhint="done">
+          </label>
+          <label class="field">
+            <span>Fecha</span>
+            <input type="date" name="date">
+          </label>
+        </div>
+        <fieldset class="field">
+          <legend>Categoría</legend>
+          <div class="cat-grid" data-cat-grid></div>
+        </fieldset>
+        <p class="form-error" data-error hidden></p>
+        <button class="btn primary big" type="submit">Guardar gasto</button>
+      </form>
+      <datalist id="name-suggestions"></datalist>
+
+      <h2 class="section-title">Últimos gastos</h2>
+      <ul id="recent-list" class="expense-list card"></ul>
+    </section>
+
+    <!-- ===== Gastos ===== -->
+    <section id="view-list" class="view" data-title="Gastos">
+      <div class="filters">
+        <input type="search" id="search" placeholder="Buscar por concepto…" autocomplete="off" enterkeyhint="search">
+        <select id="filter-cat" aria-label="Filtrar por categoría"></select>
+      </div>
+      <p id="list-summary" class="muted small"></p>
+      <div id="month-groups"></div>
+    </section>
+
+    <!-- ===== Análisis ===== -->
+    <section id="view-stats" class="view" data-title="Análisis">
+      <div class="segmented" role="tablist">
+        <button type="button" data-mode="month" class="active">Mensual</button>
+        <button type="button" data-mode="year">Anual</button>
+      </div>
+
+      <div id="stats-month">
+        <div class="period-picker">
+          <button type="button" class="icon-btn" data-month-step="-1" aria-label="Mes anterior">‹</button>
+          <input type="month" id="month-input" aria-label="Mes">
+          <button type="button" class="icon-btn" data-month-step="1" aria-label="Mes siguiente">›</button>
+        </div>
+        <div id="m-kpis" class="kpis"></div>
+        <div class="card">
+          <h3>Gasto por categoría</h3>
+          <div class="chart-box donut" id="m-donut-box"><canvas id="ch-donut"></canvas></div>
+          <div class="table-wrap"><table id="m-cat-table" class="table"></table></div>
+        </div>
+        <div class="card">
+          <h3>Top 5 gastos del mes</h3>
+          <ol id="m-top5" class="top-list"></ol>
+        </div>
+        <div class="card">
+          <h3>Gasto acumulado diario</h3>
+          <div class="chart-box"><canvas id="ch-cumulative"></canvas></div>
+        </div>
+      </div>
+
+      <div id="stats-year" hidden>
+        <div class="period-picker">
+          <button type="button" class="icon-btn" data-year-step="-1" aria-label="Año anterior">‹</button>
+          <span id="year-label" class="period-label"></span>
+          <button type="button" class="icon-btn" data-year-step="1" aria-label="Año siguiente">›</button>
+        </div>
+        <div id="y-kpis" class="kpis"></div>
+        <div class="card">
+          <h3>Gasto mensual</h3>
+          <div class="chart-box"><canvas id="ch-year-bar"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Gasto por categoría y mes</h3>
+          <div class="chart-box tall"><canvas id="ch-year-stacked"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Gasto anual por categoría</h3>
+          <div class="table-wrap"><table id="y-cat-table" class="table"></table></div>
+        </div>
+        <div class="card">
+          <h3>Evolución por categoría</h3>
+          <div id="evo-chips" class="chips"></div>
+          <div class="chart-box"><canvas id="ch-evolution"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Matriz mes × categoría <span class="muted small">(€, sin decimales)</span></h3>
+          <div class="table-wrap matrix-wrap"><table id="y-matrix" class="table matrix"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Ajustes ===== -->
+    <section id="view-settings" class="view" data-title="Ajustes">
+      <div class="card">
+        <h3>Google Sheets</h3>
+        <form id="sync-form" novalidate autocomplete="off">
+          <label class="field">
+            <span>URL del script (termina en /exec)</span>
+            <input type="url" name="url" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocorrect="off" spellcheck="false">
+          </label>
+          <label class="field">
+            <span>Token</span>
+            <input type="password" name="token" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          </label>
+          <div class="btn-row">
+            <button type="submit" class="btn primary">Guardar</button>
+            <button type="button" id="btn-test" class="btn">Probar conexión</button>
+          </div>
+        </form>
+        <div id="sync-status-text" class="status-box"></div>
+        <div class="btn-row">
+          <button type="button" id="btn-sync" class="btn">Sincronizar ahora</button>
+          <button type="button" id="btn-restore" class="btn">Restaurar desde Google Sheets</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Categorías</h3>
+        <ul id="cat-list" class="cat-list"></ul>
+        <form id="cat-add-form" class="inline-form" novalidate>
+          <input type="color" name="color" value="#e11d48" aria-label="Color">
+          <input type="text" name="name" placeholder="Nueva categoría" maxlength="40" autocapitalize="sentences">
+          <button type="submit" class="btn primary">Añadir</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Copia de seguridad (CSV)</h3>
+        <div class="row2">
+          <label class="field">
+            <span>Exportar</span>
+            <select id="export-scope">
+              <option value="all">Todos los gastos</option>
+              <option value="month">Un mes</option>
+              <option value="year">Un año</option>
+            </select>
+          </label>
+          <label class="field" id="export-month-field" hidden>
+            <span>Mes</span>
+            <input type="month" id="export-month">
+          </label>
+          <label class="field" id="export-year-field" hidden>
+            <span>Año</span>
+            <select id="export-year"></select>
+          </label>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btn-export" class="btn">Exportar CSV</button>
+          <label class="btn file-btn">Importar CSV<input type="file" id="import-file" accept=".csv,text/csv,text/plain"></label>
+        </div>
+        <p class="muted small">El CSV usa «;» como separador y UTF-8 con BOM para abrirse bien en Excel. Al importar, los gastos se fusionan por id.</p>
+      </div>
+
+      <p class="muted small center">Gastos · versión <span id="app-version">—</span></p>
+    </section>
+  </main>
+
+  <!-- Barra de pestañas -->
+  <nav class="tabbar" aria-label="Navegación">
+    <button type="button" data-view="add" class="active">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      <span>Añadir</span>
+    </button>
+    <button type="button" data-view="list">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      <span>Gastos</span>
+    </button>
+    <button type="button" data-view="stats">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      <span>Análisis</span>
+    </button>
+    <button type="button" data-view="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+      <span>Ajustes</span>
+    </button>
+  </nav>
+
+  <!-- Editar gasto -->
+  <dialog id="edit-dialog">
+    <form id="edit-form" class="expense-form" novalidate autocomplete="off">
+      <h3>Editar gasto</h3>
+      <label class="field">
+        <span>Concepto</span>
+        <input type="text" name="name" list="name-suggestions" maxlength="120">
+      </label>
+      <div class="row2">
+        <label class="field">
+          <span>Importe (€)</span>
+          <input type="text" name="amount" inputmode="decimal">
+        </label>
+        <label class="field">
+          <span>Fecha</span>
+          <input type="date" name="date">
+        </label>
+      </div>
+      <fieldset class="field">
+        <legend>Categoría</legend>
+        <div class="cat-grid" data-cat-grid></div>
+      </fieldset>
+      <p class="form-error" data-error hidden></p>
+      <div class="btn-row">
+        <button type="button" class="btn danger" data-act="delete">Eliminar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-act="cancel">Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Diálogo genérico (confirmar / pedir texto / elegir opción) -->
+  <dialog id="ask-dialog">
+    <form id="ask-form" novalidate>
+      <h3 data-title></h3>
+      <p data-message class="muted"></p>
+      <div data-body></div>
+      <div class="btn-row end">
+        <button type="button" class="btn" data-act="cancel">Cancelar</button>
+        <button type="submit" class="btn primary" data-ok>Aceptar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="update-banner" class="update-banner" hidden>
+    <span>Hay una nueva versión disponible</span>
+    <button type="button" class="btn primary" id="btn-update">Actualizar</button>
+  </div>
+</body>
+</html>

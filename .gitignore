@@ -1,0 +1,19 @@
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Python (generador de iconos)
+__pycache__/
+*.pyc
+
+# Copias de seguridad locales y secretos (nunca subir datos reales ni tokens)
+*.csv
+.env
+*.local
+.claude/
