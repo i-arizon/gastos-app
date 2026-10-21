@@ -53,6 +53,7 @@ function showView(view) {
   $('#view-title').textContent = $(`#view-${view}`).dataset.title;
   window.scrollTo(0, 0);
   renderCurrentView();
+  tryAutoUpdate();
 }
 
 /* ---------- Avisos ---------- */
@@ -559,38 +560,71 @@ function setupBackup() {
 }
 
 /* ---------- Service worker y actualizaciones ---------- */
+// Solo se actualiza sola si no hay nada a medio escribir (formulario vacío, sin diálogos ni campo enfocado).
+function isIdle() {
+  const form = $('#add-form');
+  return !form.elements.name.value && !form.elements.amount.value &&
+    !$$('dialog').some((d) => d.open) &&
+    !document.activeElement?.matches('input, select, textarea');
+}
+
+let swReg = null;
+let updateRequested = false;
+function applyUpdate() {
+  if (!swReg?.waiting) return;
+  updateRequested = true;
+  try { sessionStorage.setItem('justUpdated', '1'); } catch {}
+  swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+}
+
+// Llamado al detectar versión nueva, al cambiar de pestaña y al salir de la app.
+function tryAutoUpdate() {
+  if (swReg?.waiting && navigator.serviceWorker.controller && isIdle()) applyUpdate();
+}
+
 function setupServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+  // Recarga solo cuando la app ha aplicado una versión nueva (no en la primera instalación).
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
+    if (refreshing || !updateRequested) return;
     refreshing = true;
     location.reload();
   });
 
   navigator.serviceWorker.register('sw.js').then((reg) => {
-    const showBanner = () => {
+    swReg = reg;
+    // Si hay algo a medio escribir se muestra el aviso; se aplicará en cuanto quede libre.
+    const onWaiting = () => {
+      if (!navigator.serviceWorker.controller) return;
+      $('#btn-update').onclick = applyUpdate;
       $('#update-banner').hidden = false;
-      $('#btn-update').onclick = () => reg.waiting?.postMessage({ type: 'SKIP_WAITING' });
+      tryAutoUpdate();
     };
-    if (reg.waiting && navigator.serviceWorker.controller) showBanner();
+    if (reg.waiting) onWaiting();
     reg.addEventListener('updatefound', () => {
       const w = reg.installing;
       w?.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) showBanner();
+        if (w.state === 'installed') onWaiting();
       });
     });
-    // Busca versiones nuevas al volver a la app y cada 30 minutos.
+    // Busca versiones nuevas al volver a la app y cada 30 minutos; al salir, aplica la pendiente.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      else tryAutoUpdate();
     });
     setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
   }).catch((err) => console.warn('SW no registrado:', err));
 
-  // Muestra la versión publicada (definida en sw.js).
+  // Muestra la versión publicada (definida en sw.js) y avisa si se acaba de actualizar.
   navigator.serviceWorker.ready.then((reg) => {
     const ch = new MessageChannel();
-    ch.port1.onmessage = (ev) => { $('#app-version').textContent = ev.data; };
+    ch.port1.onmessage = (ev) => {
+      $('#app-version').textContent = ev.data;
+      let updated = false;
+      try { updated = sessionStorage.getItem('justUpdated') === '1'; sessionStorage.removeItem('justUpdated'); } catch {}
+      if (updated) toast(`App actualizada · versión ${ev.data}`);
+    };
     reg.active?.postMessage({ type: 'GET_VERSION' }, [ch.port2]);
   });
 }

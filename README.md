@@ -11,7 +11,7 @@ Hecha con HTML, CSS y JavaScript (módulos ES) sin framework ni paso de compilac
 - **Sincronización con Google Sheets.** Cada alta, edición o borrado se guarda primero en local, se añade a una cola y se envía al instante a un Apps Script publicado como aplicación web. Si falla (sin conexión, error), se reintenta al abrir la app, al recuperar la conexión, al volver a la app y cada 3 minutos. El indicador de la cabecera muestra *Sincronizado*, *N pendientes* o *Error*.
 - **Restaurar.** En Ajustes, *Restaurar desde Google Sheets* descarga todos los gastos y los fusiona por `id`, quedándose con el `updatedAt` más reciente. Útil en un iPhone nuevo o tras borrar los datos de Safari.
 - **Copia CSV.** Exportación (todo, un mes o un año) e importación en CSV con `;` y UTF-8 con BOM, que Excel en español abre directamente.
-- **Offline y actualizaciones.** El service worker (`sw.js`) guarda en caché la app y Chart.js. Cuando se publica una versión nueva aparece el aviso *Hay una nueva versión disponible → Actualizar*.
+- **Offline y actualizaciones.** El service worker (`sw.js`) guarda en caché la app y Chart.js. Cuando se publica una versión nueva, la app se actualiza sola al abrirla, al cambiar de pestaña o al salir de ella, siempre que no estés escribiendo un gasto. Si lo estás, aparece el aviso *Hay una nueva versión disponible → Actualizar* y la actualización se aplica en cuanto termines.
 - **Privacidad.** La URL del script y el token se introducen en Ajustes y se guardan solo en el dispositivo (IndexedDB). No están en el código, porque el repositorio es público.
 
 ## Pantallas
@@ -76,7 +76,7 @@ tools/make_icons.py Generador de los iconos (Python, sin dependencias)
    git commit -m "Descripción del cambio"
    git push
    ```
-5. GitHub Pages tarda 1–2 minutos. Al abrir la app en el iPhone aparecerá *Hay una nueva versión disponible → Actualizar*.
+5. GitHub Pages tarda 1–2 minutos. Al abrir la app en el iPhone se actualizará sola en unos segundos (verás «App actualizada · versión …»).
 
 ## Notas
 
