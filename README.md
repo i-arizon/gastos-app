@@ -69,6 +69,7 @@ tools/make_icons.py Generador de los iconos (Python, sin dependencias)
 
 1. Edita los archivos.
 2. **Sube `VERSION` en `sw.js`** (p. ej. `1.0.0` → `1.0.1`). Sin esto los iPhone seguirán usando la versión en caché.
+   - **Si el cambio toca `apps-script/Code.gs`,** sube también `SCRIPT_VERSION` en `Code.gs` y `REQUIRED_SCRIPT_VERSION` en `sync.js` (al mismo número). Así, quien use la app con un script anterior verá en Ajustes el aviso *Actualiza el script de Google*, con los pasos.
 3. Prueba en local: `python -m http.server 8000` y abre <http://localhost:8000>.
 4. Publica:
    ```bash
@@ -77,6 +78,10 @@ tools/make_icons.py Generador de los iconos (Python, sin dependencias)
    git push
    ```
 5. GitHub Pages tarda 1–2 minutos. Al abrir la app en el iPhone se actualizará sola en unos segundos (verás «App actualizada · versión …»).
+
+## Compartir la app con otra persona
+
+Cada persona usa la misma web, pero con **su propia hoja y su propio script** (con su token), así que los datos de cada uno son independientes y nadie ve los del otro. Solo quien tiene acceso al repositorio puede publicar cambios en la app; las actualizaciones llegan solas a todos. Cuando un cambio afecte al script, cada persona verá un aviso en Ajustes para actualizar el suyo.
 
 ## Notas
 

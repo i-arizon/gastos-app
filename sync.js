@@ -5,8 +5,13 @@ import * as db from './db.js';
 const AUTO_INTERVAL_MS = 3 * 60 * 1000;
 const CHUNK = 200;
 
+// Versión mínima del Apps Script que necesita esta app. Súbela a la vez que SCRIPT_VERSION en Code.gs
+// cuando el script cambie: quien tenga uno anterior verá un aviso en Ajustes.
+export const REQUIRED_SCRIPT_VERSION = 2;
+
 export const events = new EventTarget();
-let state = { status: 'idle', pending: 0, message: '', lastSync: null };
+// scriptVersion: última versión del script vista (null = aún no se sabe; los scripts sin número son la 1).
+let state = { status: 'idle', pending: 0, message: '', lastSync: null, scriptVersion: null };
 let running = null;
 let again = false;
 
@@ -15,6 +20,15 @@ function emit(patch) {
   events.dispatchEvent(new CustomEvent('change', { detail: state }));
 }
 export const getState = () => state;
+export const isScriptOutdated = (s = state) => s.scriptVersion !== null && s.scriptVersion < REQUIRED_SCRIPT_VERSION;
+
+// Guarda la versión que anuncia el script en cada respuesta.
+async function noteScriptVersion(data) {
+  const v = Number(data.version) || 1;
+  if (v === state.scriptVersion) return;
+  await db.setSetting('scriptVersion', v);
+  emit({ scriptVersion: v });
+}
 
 async function getConfig() {
   const url = (await db.getSetting('scriptUrl', '')).trim();
@@ -35,6 +49,7 @@ async function parseResponse(res) {
       ? 'Respuesta no válida. Revisa la URL y que el acceso sea "Cualquier usuario".'
       : `HTTP ${res.status}`);
   }
+  await noteScriptVersion(data);
   if (data.status !== 'ok') throw new Error(data.message || 'Error desconocido del script');
   return data;
 }
@@ -161,8 +176,10 @@ export async function restore() {
 // Reintentos automáticos: al abrir, al recuperar conexión, al volver a la app y cada pocos minutos.
 export async function startAutoSync() {
   const lastSync = await db.getSetting('lastSync', null);
-  emit({ lastSync });
+  emit({ lastSync, scriptVersion: await db.getSetting('scriptVersion', null) });
   syncNow();
+  // Comprueba la versión del script al abrir (aunque no haya nada que enviar).
+  if (navigator.onLine && (await isConfigured())) ping().catch(() => {});
   window.addEventListener('online', () => syncNow());
   window.addEventListener('offline', () => refreshStatus());
   document.addEventListener('visibilitychange', () => {

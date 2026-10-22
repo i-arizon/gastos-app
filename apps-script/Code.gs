@@ -25,6 +25,10 @@ var HEADERS = ['id', 'date', 'name', 'amount', 'category', 'createdAt', 'updated
 var FORMATS = ['@', '@', '@', '#,##0.00', '@', '@', '@', '@', '@', '@'];
 var UPDATED_AT_COL = 6; // índice (base 0) de updatedAt
 
+// Versión de este script. Súbela cada vez que cambie este archivo (y REQUIRED_SCRIPT_VERSION en sync.js):
+// la app la compara y avisa en Ajustes si el script de la hoja está desactualizado.
+var SCRIPT_VERSION = 2;
+
 function doPost(e) {
   try {
     var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
@@ -190,7 +194,9 @@ function toTimestamp_(v) {
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
+// Todas las respuestas incluyen la versión del script.
 function json_(obj) {
+  obj.version = SCRIPT_VERSION;
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 

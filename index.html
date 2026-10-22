@@ -166,6 +166,17 @@
           </div>
         </form>
         <div id="sync-status-text" class="status-box"></div>
+        <div id="script-warning" class="status-box warn" hidden>
+          <strong>Actualiza el script de Google.</strong>
+          Tu hoja usa la versión <span data-script-v></span> del script y esta app necesita la <span data-script-req></span>.
+          Hasta que lo actualices, algunos datos nuevos no se guardarán bien en la hoja.
+          <ol>
+            <li>Copia el código nuevo: <a href="https://github.com/i-arizon/gastos-app/blob/main/apps-script/Code.gs" target="_blank" rel="noopener">Code.gs en GitHub</a> (botón 📋).</li>
+            <li>En tu hoja: <b>Extensiones → Apps Script</b>, sustituye todo el código y guarda.</li>
+            <li><b>Implementar → Gestionar implementaciones → ✏️ → Nueva versión → Implementar</b>.</li>
+            <li>Vuelve aquí y pulsa <b>Probar conexión</b>.</li>
+          </ol>
+        </div>
         <div class="btn-row">
           <button type="button" id="btn-sync" class="btn">Sincronizar ahora</button>
           <button type="button" id="btn-restore" class="btn">Restaurar desde Google Sheets</button>

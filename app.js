@@ -628,6 +628,23 @@ function renderSyncStatus(s) {
   };
   box.textContent = `${lines[s.status]} Última sincronización: ${last}.`;
   box.classList.toggle('error', s.status === 'error');
+  renderScriptWarning(s);
+}
+
+// Aviso de script desactualizado: en Ajustes, con un punto en la pestaña y un aviso al detectarlo.
+let scriptWarned = false;
+function renderScriptWarning(s) {
+  const outdated = sync.isScriptOutdated(s);
+  const box = $('#script-warning');
+  box.hidden = !outdated;
+  $('.tabbar [data-view="settings"]').classList.toggle('alert', outdated);
+  if (!outdated) return;
+  $('[data-script-v]', box).textContent = s.scriptVersion;
+  $('[data-script-req]', box).textContent = sync.REQUIRED_SCRIPT_VERSION;
+  if (!scriptWarned) {
+    scriptWarned = true;
+    toast('Actualiza el script de Google (mira Ajustes)', 'error');
+  }
 }
 
 async function setupSyncSettings() {
@@ -653,6 +670,7 @@ async function setupSyncSettings() {
     if (!(await save())) return;
     toast('Ajustes guardados');
     sync.syncNow();
+    sync.ping().catch(() => {}); // comprueba la versión del script nuevo
   });
 
   $('#btn-test').addEventListener('click', async () => {
