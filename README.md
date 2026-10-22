@@ -1,13 +1,13 @@
 # Gastos
 
-Aplicación web progresiva (PWA) para llevar el control de gastos personales, pensada para iPhone (Safari, iOS 17+) e instalable con **Compartir → Añadir a pantalla de inicio**. Funciona sin conexión y se sincroniza con una hoja de Google Sheets.
+Aplicación web progresiva (PWA) para llevar el control de gastos e ingresos personales, pensada para iPhone (Safari, iOS 17+) e instalable con **Compartir → Añadir a pantalla de inicio**. Funciona sin conexión y se sincroniza con una hoja de Google Sheets.
 
 Hecha con HTML, CSS y JavaScript (módulos ES) sin framework ni paso de compilación. Los gráficos usan [Chart.js](https://www.chartjs.org/) 4.4.1 desde cdnjs.
 
 ## Cómo funciona
 
 - **Datos locales (IndexedDB).** Gastos, categorías, ajustes y la cola de sincronización se guardan en el propio iPhone. Es la fuente de verdad: la app funciona completa sin conexión.
-- **Modelo de gasto:** `id` (UUID), `date` (AAAA-MM-DD), `name`, `amount` (EUR), `category`, `tag` (etiqueta opcional, p. ej. «Viaje Lisboa»), `createdAt`, `updatedAt` (ISO) y `deleted`. Los borrados son lógicos (`deleted = true`) para que también se sincronicen.
+- **Modelo de movimiento:** `id` (UUID), `type` (`expense` gasto o `income` ingreso), `date` (AAAA-MM-DD), `name`, `amount` (EUR), `category`, `tag` (etiqueta opcional, p. ej. «Viaje Lisboa»), `createdAt`, `updatedAt` (ISO) y `deleted`. Los borrados son lógicos (`deleted = true`) para que también se sincronicen.
 - **Sincronización con Google Sheets.** Cada alta, edición o borrado se guarda primero en local, se añade a una cola y se envía al instante a un Apps Script publicado como aplicación web. Si falla (sin conexión, error), se reintenta al abrir la app, al recuperar la conexión, al volver a la app y cada 3 minutos. El indicador de la cabecera muestra *Sincronizado*, *N pendientes* o *Error*.
 - **Restaurar.** En Ajustes, *Restaurar desde Google Sheets* descarga todos los gastos y los fusiona por `id`, quedándose con el `updatedAt` más reciente. Útil en un iPhone nuevo o tras borrar los datos de Safari.
 - **Copia CSV.** Exportación (todo, un mes o un año) e importación en CSV con `;` y UTF-8 con BOM, que Excel en español abre directamente.
@@ -18,10 +18,10 @@ Hecha con HTML, CSS y JavaScript (módulos ES) sin framework ni paso de compilac
 
 | Pestaña | Contenido |
 |---|---|
-| **Añadir** | Formulario rápido (concepto, importe con teclado numérico y coma decimal, fecha, categoría) y los últimos 10 gastos. El importe admite operaciones (`12,50+3,20`, `45÷3`) con la barra + − × ÷ que aparece bajo el campo. Las categorías más usadas en los últimos 90 días salen primero. Etiqueta opcional para agrupar gastos (viajes, eventos…). |
-| **Gastos** | Todos los gastos agrupados por mes, con buscador y filtros por categoría y por etiqueta. Toca uno para editarlo, o deslízalo a la izquierda para *Editar* / *Eliminar*. Tira hacia abajo desde arriba del todo para sincronizar (envía lo pendiente y descarga los cambios de la hoja). |
-| **Análisis** | *Mensual:* total y variación frente al mes anterior, donut y tabla por categoría, top 5 y gasto acumulado diario. *Anual:* total y media mensual, barras por mes, barras apiladas por categoría, tabla anual, evolución de las categorías que elijas y matriz mes × categoría. *Etiquetas:* total, nº de gastos y fechas de cada etiqueta; toca una para ver sus gastos. |
-| **Ajustes** | Conexión con Google Sheets, sincronizar ahora, restaurar, gestión de categorías (añadir, cambiar color tocando la muestra, y deslizar a la izquierda para *Renombrar* o *Eliminar* con reasignación de sus gastos) y copia CSV. |
+| **Añadir** | Selector *Gasto / Ingreso* (en modo ingreso el formulario se pone verde y muestra las categorías de ingreso). Formulario rápido (concepto, importe con teclado numérico y coma decimal, fecha, categoría) y los últimos 10 movimientos. El importe admite operaciones (`12,50+3,20`, `45÷3`) con la barra + − × ÷ que aparece bajo el campo. Las categorías más usadas en los últimos 90 días salen primero. Etiqueta opcional para agrupar gastos (viajes, eventos…). |
+| **Movimientos** | Todos los gastos e ingresos agrupados por mes (los ingresos en verde y con «+»), con buscador y filtros por categoría y por etiqueta. Toca uno para editarlo, o deslízalo a la izquierda para *Editar* / *Eliminar*. Tira hacia abajo desde arriba del todo para sincronizar (envía lo pendiente y descarga los cambios de la hoja). |
+| **Análisis** | Arriba, resumen de *Ingresos, Gastos y Diferencia* (mes) o *Ahorro* (año), con el % sobre los ingresos. Los gráficos por categoría son solo de gastos. *Mensual:* total y variación frente al mes anterior, donut y tabla por categoría, top 5 y gasto acumulado diario. *Anual:* media mensual de gasto, barras por mes, tabla anual por categoría y evolución de las categorías que elijas. *Etiquetas:* total, nº de gastos y fechas de cada etiqueta; toca una para ver sus gastos. |
+| **Ajustes** | Conexión con Google Sheets, sincronizar ahora, restaurar, gestión de categorías de gasto y de ingreso por separado (añadir, cambiar color tocando la muestra, y deslizar a la izquierda para *Renombrar* o *Eliminar* con reasignación de sus gastos) y copia CSV. |
 
 ## Estructura
 

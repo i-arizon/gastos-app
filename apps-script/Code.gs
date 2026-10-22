@@ -9,7 +9,7 @@
  * Guarda el token en Configuración del proyecto > Propiedades del script con la clave TOKEN.
  *
  * POST (cuerpo JSON enviado como text/plain; el token va en el cuerpo, no en la URL):
- *   { "token": "...", "action": "upsert" | "delete", "expenses": [ {id, date, name, amount, category, createdAt, updatedAt, deleted, tag}, ... ] }
+ *   { "token": "...", "action": "upsert" | "delete", "expenses": [ {id, date, name, amount, category, createdAt, updatedAt, deleted, tag, type}, ... ] }
  *   { "token": "...", "action": "list" }   -> todos los gastos (incluidos los borrados)
  *   { "token": "...", "action": "ping" }   -> comprobación de conexión
  * GET (alternativa manual; la app usa POST para no dejar el token en los registros):
@@ -18,10 +18,11 @@
  */
 
 var SHEET_NAME = 'Gastos';
-// 'tag' va al final para no mover las columnas de hojas ya existentes.
-var HEADERS = ['id', 'date', 'name', 'amount', 'category', 'createdAt', 'updatedAt', 'deleted', 'tag'];
+// Las columnas nuevas (tag, type) van al final para no mover las de hojas ya existentes.
+// type: 'expense' (gasto) o 'income' (ingreso); vacío en filas antiguas = gasto.
+var HEADERS = ['id', 'date', 'name', 'amount', 'category', 'createdAt', 'updatedAt', 'deleted', 'tag', 'type'];
 // Texto plano para id/fecha/nombre/categoría/timestamps: evita que Sheets convierta las fechas.
-var FORMATS = ['@', '@', '@', '#,##0.00', '@', '@', '@', '@', '@'];
+var FORMATS = ['@', '@', '@', '#,##0.00', '@', '@', '@', '@', '@', '@'];
 var UPDATED_AT_COL = 6; // índice (base 0) de updatedAt
 
 function doPost(e) {
@@ -77,6 +78,7 @@ function readResponse_(action) {
       updatedAt: toTimestamp_(r[6]),
       deleted: r[7] === true || String(r[7]).toUpperCase() === 'TRUE',
       tag: String(r[8] || ''),
+      type: r[9] === 'income' ? 'income' : 'expense',
     };
   });
   return json_({ status: 'ok', count: expenses.length, expenses: expenses });
@@ -145,6 +147,7 @@ function toRow_(exp, forceDeleted) {
     String(exp.updatedAt || new Date().toISOString()),
     forceDeleted || exp.deleted === true ? 'TRUE' : 'FALSE',
     String(exp.tag || ''),
+    exp.type === 'income' ? 'income' : 'expense',
   ];
 }
 
@@ -166,7 +169,7 @@ function getSheet_() {
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
     sheet.setFrozenRows(1);
   } else if (sheet.getRange(1, HEADERS.length).getValue() !== HEADERS[HEADERS.length - 1]) {
-    // Hoja creada con una versión anterior: añade la cabecera de la columna nueva (tag).
+    // Hoja creada con una versión anterior: añade las cabeceras de las columnas nuevas (tag, type).
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
   }
   return sheet;

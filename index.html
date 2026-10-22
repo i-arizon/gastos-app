@@ -24,7 +24,7 @@
 </head>
 <body>
   <header class="topbar">
-    <h1 id="view-title">Añadir gasto</h1>
+    <h1 id="view-title">Añadir</h1>
     <button id="sync-indicator" class="sync-pill" data-status="idle" type="button" aria-label="Estado de sincronización">
       <span class="dot"></span><span class="label">…</span>
     </button>
@@ -35,8 +35,12 @@
     <div id="ptr" aria-hidden="true"><span class="ptr-icon">↓</span><span class="ptr-text">Desliza para sincronizar</span></div>
 
     <!-- ===== Añadir ===== -->
-    <section id="view-add" class="view active" data-title="Añadir gasto">
+    <section id="view-add" class="view active" data-title="Añadir">
       <form id="add-form" class="card expense-form" novalidate autocomplete="off">
+        <div class="type-toggle" role="radiogroup" aria-label="Tipo de movimiento">
+          <label><input type="radio" name="type" value="expense" checked><span>Gasto</span></label>
+          <label><input type="radio" name="type" value="income"><span>Ingreso</span></label>
+        </div>
         <label class="field">
           <span>Concepto</span>
           <input type="text" name="name" placeholder="Ej. Mercadona" list="name-suggestions" autocapitalize="sentences" enterkeyhint="next" maxlength="120">
@@ -60,17 +64,17 @@
           <input type="text" name="tag" placeholder="Ej. Viaje Lisboa" list="tag-suggestions" autocapitalize="sentences" maxlength="40" enterkeyhint="done">
         </label>
         <p class="form-error" data-error hidden></p>
-        <button class="btn primary big" type="submit">Guardar gasto</button>
+        <button class="btn primary big" type="submit" data-submit>Guardar gasto</button>
       </form>
       <datalist id="name-suggestions"></datalist>
       <datalist id="tag-suggestions"></datalist>
 
-      <h2 class="section-title">Últimos gastos</h2>
+      <h2 class="section-title">Últimos movimientos</h2>
       <ul id="recent-list" class="expense-list card"></ul>
     </section>
 
     <!-- ===== Gastos ===== -->
-    <section id="view-list" class="view" data-title="Gastos">
+    <section id="view-list" class="view" data-title="Movimientos">
       <div class="filters">
         <input type="search" id="search" placeholder="Buscar por concepto…" autocomplete="off" enterkeyhint="search">
         <select id="filter-cat" aria-label="Filtrar por categoría"></select>
@@ -94,6 +98,7 @@
           <input type="month" id="month-input" aria-label="Mes">
           <button type="button" class="icon-btn" data-month-step="1" aria-label="Mes siguiente">›</button>
         </div>
+        <div id="m-balance" class="card balance"></div>
         <div id="m-kpis" class="kpis"></div>
         <div class="card">
           <h3>Gasto por categoría</h3>
@@ -116,14 +121,11 @@
           <span id="year-label" class="period-label"></span>
           <button type="button" class="icon-btn" data-year-step="1" aria-label="Año siguiente">›</button>
         </div>
+        <div id="y-balance" class="card balance"></div>
         <div id="y-kpis" class="kpis"></div>
         <div class="card">
           <h3>Gasto mensual</h3>
           <div class="chart-box"><canvas id="ch-year-bar"></canvas></div>
-        </div>
-        <div class="card">
-          <h3>Gasto por categoría y mes</h3>
-          <div class="chart-box tall"><canvas id="ch-year-stacked"></canvas></div>
         </div>
         <div class="card">
           <h3>Gasto anual por categoría</h3>
@@ -133,10 +135,6 @@
           <h3>Evolución por categoría</h3>
           <div id="evo-chips" class="chips"></div>
           <div class="chart-box"><canvas id="ch-evolution"></canvas></div>
-        </div>
-        <div class="card">
-          <h3>Matriz mes × categoría <span class="muted small">(€, sin decimales)</span></h3>
-          <div class="table-wrap matrix-wrap"><table id="y-matrix" class="table matrix"></table></div>
         </div>
       </div>
 
@@ -176,6 +174,10 @@
 
       <div class="card">
         <h3>Categorías</h3>
+        <div class="segmented two" id="cat-type" role="tablist">
+          <button type="button" data-cat-type="expense" class="active">Gastos</button>
+          <button type="button" data-cat-type="income">Ingresos</button>
+        </div>
         <p class="muted small">Toca el color para cambiarlo. Desliza una categoría a la izquierda para renombrarla o eliminarla.</p>
         <ul id="cat-list" class="cat-list"></ul>
         <form id="cat-add-form" class="inline-form" novalidate>
@@ -224,7 +226,7 @@
     </button>
     <button type="button" data-view="list">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
-      <span>Gastos</span>
+      <span>Movimientos</span>
     </button>
     <button type="button" data-view="stats">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
@@ -239,7 +241,12 @@
   <!-- Editar gasto -->
   <dialog id="edit-dialog">
     <form id="edit-form" class="expense-form" novalidate autocomplete="off">
-      <h3>Editar gasto</h3>
+      <h3 data-edit-title>Editar gasto</h3>
+      <div class="type-toggle" role="radiogroup" aria-label="Tipo de movimiento">
+        <label><input type="radio" name="type" value="expense" checked><span>Gasto</span></label>
+        <label><input type="radio" name="type" value="income"><span>Ingreso</span></label>
+      </div>
+      
       <label class="field">
         <span>Concepto</span>
         <input type="text" name="name" list="name-suggestions" maxlength="120">

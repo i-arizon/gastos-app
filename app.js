@@ -17,11 +17,16 @@ const state = {
   categories: [],
   view: 'add',
   statsMode: 'month',
+  catType: 'expense', // tipo de categorías mostrado en Ajustes
   month: currentYM(),
   year: currentYear(),
 };
 
 const colorOf = (name) => state.categories.find((c) => c.name === name)?.color || '#94a3b8';
+const isIncome = (m) => m.type === 'income';
+const expensesOnly = () => state.expenses.filter((m) => !isIncome(m));
+const incomesOnly = () => state.expenses.filter(isIncome);
+const catsOfType = (type) => state.categories.filter((c) => c.type === type);
 
 /* ---------- Carga y render ---------- */
 async function loadData() {
@@ -32,7 +37,7 @@ async function loadData() {
 }
 
 function renderAll() {
-  renderCatGrid($('#add-form [data-cat-grid]'));
+  renderCatGrid($('#add-form [data-cat-grid]'), undefined, formType($('#add-form')));
   renderFilterOptions();
   renderRecent();
   renderNameSuggestions();
@@ -114,20 +119,20 @@ function ask({ title, message = '', input = null, select = null, okText = 'Acept
 /* ---------- Formularios de gasto ---------- */
 const USAGE_DAYS = 90;
 
-// Categorías ordenadas por nº de gastos de los últimos 90 días; a igualdad, el orden de Ajustes.
-function categoriesByUsage() {
+// Categorías del tipo indicado, ordenadas por nº de usos en los últimos 90 días; a igualdad, el orden de Ajustes.
+function categoriesByUsage(type) {
   const since = new Date(Date.now() - USAGE_DAYS * 864e5);
   const sinceISO = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}`;
   const uses = {};
   for (const e of state.expenses) {
     if (e.date >= sinceISO) uses[e.category] = (uses[e.category] || 0) + 1;
   }
-  return [...state.categories].sort((a, b) => (uses[b.name] || 0) - (uses[a.name] || 0) || a.order - b.order);
+  return catsOfType(type).sort((a, b) => (uses[b.name] || 0) - (uses[a.name] || 0) || a.order - b.order);
 }
 
-function renderCatGrid(container, selected) {
+function renderCatGrid(container, selected, type = 'expense') {
   if (selected === undefined) selected = $('input:checked', container)?.value;
-  container.innerHTML = categoriesByUsage().map((c) => `
+  container.innerHTML = categoriesByUsage(type).map((c) => `
     <label class="cat-chip" style="--c:${c.color}">
       <input type="radio" name="category" value="${esc(c.name)}" ${c.name === selected ? 'checked' : ''}>
       <span>${esc(c.name)}</span>
@@ -141,7 +146,38 @@ function readForm(form) {
     date: form.elements.date.value,
     category: $('input[name="category"]:checked', form)?.value || '',
     tag: form.elements.tag.value.trim(),
+    type: formType(form),
   };
+}
+
+/* ---------- Selector Gasto | Ingreso ---------- */
+const formType = (form) => (form.elements.type.value === 'income' ? 'income' : 'expense');
+
+// Pinta el formulario según el tipo: verde para ingresos, categorías del tipo y textos.
+function applyType(form, selected) {
+  const type = formType(form);
+  const income = type === 'income';
+  form.classList.toggle('is-income', income);
+  const grid = $('[data-cat-grid]', form);
+  if (selected === undefined) {
+    // Al cambiar de tipo se quita la categoría elegida si es del otro tipo.
+    const current = $('input:checked', grid)?.value;
+    selected = catsOfType(type).some((c) => c.name === current) ? current : '';
+  }
+  renderCatGrid(grid, selected, type);
+  const submit = $('[data-submit]', form);
+  if (submit) submit.textContent = income ? 'Guardar ingreso' : 'Guardar gasto';
+  const title = $('[data-edit-title]', form);
+  if (title) title.textContent = income ? 'Editar ingreso' : 'Editar gasto';
+  form.elements.name.placeholder = income ? 'Ej. Nómina' : (form.id === 'add-form' ? 'Ej. Mercadona' : '');
+}
+
+function setupTypeToggle(form) {
+  form.addEventListener('change', (ev) => {
+    if (ev.target.name !== 'type') return;
+    $('fieldset', form).classList.remove('invalid');
+    applyType(form);
+  });
 }
 
 // Valida y marca los campos con error. Devuelve true si es válido.
@@ -230,6 +266,9 @@ function resetAddForm() {
   form.elements.tag.value = '';
   form.elements.date.value = todayISO();
   $$('input[name="category"]', form).forEach((r) => { r.checked = false; });
+  // Tras guardar se vuelve a Gasto, que es lo habitual (los ingresos son pocos al mes).
+  form.elements.type.value = 'expense';
+  applyType(form, '');
   clearValidation(form);
 }
 
@@ -245,7 +284,7 @@ function setupAddForm() {
     form.elements.name.focus();
     try {
       await db.saveExpense(data);
-      toast(`Guardado · ${fmtEUR(data.amount)}`);
+      toast(`${data.type === 'income' ? 'Ingreso guardado · +' : 'Guardado · '}${fmtEUR(data.amount)}`);
       await loadData();
       await sync.refreshStatus();
       sync.syncNow();
@@ -287,12 +326,13 @@ function openEdit(id) {
   form.dataset.id = id;
   form.elements.name.value = exp.name;
   form.elements.tag.value = exp.tag || '';
+  form.elements.type.value = isIncome(exp) ? 'income' : 'expense';
   form.elements.amount.value = String(exp.amount).replace('.', ',');
   form.elements.date.value = exp.date;
   // Si la categoría ya no existe, se muestra igualmente para no perderla.
   const grid = $('[data-cat-grid]', form);
-  renderCatGrid(grid, exp.category);
-  if (!state.categories.some((c) => c.name === exp.category)) {
+  applyType(form, exp.category);
+  if (!catsOfType(formType(form)).some((c) => c.name === exp.category)) {
     grid.insertAdjacentHTML('beforeend', `<label class="cat-chip" style="--c:#94a3b8"><input type="radio" name="category" value="${esc(exp.category)}" checked><span>${esc(exp.category)}</span></label>`);
   }
   clearValidation(form);
@@ -317,8 +357,13 @@ function expenseItem(e) {
     <span class="exp-dot" style="background:${colorOf(e.category)}"></span>
     <span class="exp-main"><span class="exp-name">${esc(e.name)}</span>
       <span class="exp-meta">${esc(e.category)} · ${fmtDate(e.date)}${e.tag ? ` <span class="tag-pill">${esc(e.tag)}</span>` : ''}</span></span>
-    <span class="exp-amount">${fmtEUR(e.amount)}</span></button></li>`;
+    ${amountHTML(e)}</button></li>`;
 }
+
+// Los ingresos van en verde y con «+»; los gastos, sin signo, como siempre.
+const amountHTML = (m) => (isIncome(m)
+  ? `<span class="exp-amount amount-income">+${fmtEUR(m.amount)}</span>`
+  : `<span class="exp-amount">${fmtEUR(m.amount)}</span>`);
 
 /* ---------- Deslizar para ver acciones (gastos y categorías) ---------- */
 // Estructura: <li class="swipe"><div class="swipe-actions">[data-swipe]…</div><… class="swipe-front">…</li>
@@ -410,7 +455,7 @@ function renderRecent() {
   const list = state.expenses.slice(0, 10);
   $('#recent-list').innerHTML = list.length
     ? list.map(expenseItem).join('')
-    : '<li class="empty">Aún no hay gastos. ¡Añade el primero!</li>';
+    : '<li class="empty">Aún no hay movimientos. ¡Añade el primero!</li>';
 }
 
 // Etiquetas usadas, de la más reciente a la más antigua.
@@ -425,9 +470,14 @@ function renderNameSuggestions() {
 function renderFilterOptions() {
   const sel = $('#filter-cat');
   const current = sel.value;
-  const names = [...new Set([...state.categories.map((c) => c.name), ...state.expenses.map((e) => e.category)])];
+  // Categorías de gasto e ingreso en grupos separados (más las que solo existan en movimientos).
+  const known = new Set(state.categories.map((c) => c.name));
+  const orphans = [...new Set(state.expenses.map((e) => e.category))].filter((n) => !known.has(n));
+  const opts = (list) => list.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   sel.innerHTML = '<option value="">Todas las categorías</option>' +
-    names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    `<optgroup label="Gastos">${opts(catsOfType('expense').map((c) => c.name).concat(orphans))}</optgroup>` +
+    `<optgroup label="Ingresos">${opts(catsOfType('income').map((c) => c.name))}</optgroup>`;
+  const names = [...known, ...orphans];
   sel.value = names.includes(current) ? current : '';
 
   // El filtro de etiquetas solo aparece si se ha usado alguna.
@@ -454,14 +504,22 @@ function renderList() {
     if (!groups.has(ym)) groups.set(ym, []);
     groups.get(ym).push(e);
   }
-  $('#list-summary').textContent = `${items.length} ${items.length === 1 ? 'gasto' : 'gastos'} · ${fmtEUR(sum(items))}`;
+  // Totales: gastos e ingresos por separado (el ingreso solo se muestra si hay alguno).
+  const totals = (list) => {
+    const inc = sum(list.filter(isIncome));
+    const exp = sum(list.filter((m) => !isIncome(m)));
+    return `<span class="amount-expense">${fmtEUR(exp)}</span>${inc ? ` <span class="amount-income">+${fmtEUR(inc)}</span>` : ''}`;
+  };
+  const inc = sum(items.filter(isIncome));
+  $('#list-summary').innerHTML = `${items.length} ${items.length === 1 ? 'movimiento' : 'movimientos'} · Gastos ${fmtEUR(sum(items.filter((m) => !isIncome(m))))}` +
+    (inc ? ` · <span class="amount-income">Ingresos +${fmtEUR(inc)}</span>` : '');
   $('#month-groups').innerHTML = groups.size
     ? [...groups].map(([ym, list]) => `
       <section class="month-group">
-        <h3><span>${monthLabel(ym)}</span><span>${fmtEUR(sum(list))}</span></h3>
+        <h3><span>${monthLabel(ym)}</span><span>${totals(list)}</span></h3>
         <ul class="expense-list card">${list.map(expenseItem).join('')}</ul>
       </section>`).join('')
-    : `<p class="empty">${state.expenses.length ? 'No hay gastos que coincidan.' : 'Aún no hay gastos.'}</p>`;
+    : `<p class="empty">${state.expenses.length ? 'No hay movimientos que coincidan.' : 'Aún no hay movimientos.'}</p>`;
 }
 
 /* ---------- Análisis ---------- */
@@ -473,7 +531,8 @@ function renderStats() {
   $$('.segmented button').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'tags') return renderTagsTable();
   if (!window.Chart) toast('No se pudo cargar Chart.js (¿sin conexión la primera vez?)', 'error');
-  const ctx = { expenses: state.expenses, categories: state.categories, colorOf, onOpen: openEdit };
+  // Los gráficos y tablas por categoría son solo de gastos; los ingresos van al resumen.
+  const ctx = { expenses: expensesOnly(), incomes: incomesOnly(), categories: catsOfType('expense'), colorOf, onOpen: openEdit };
   if (mode === 'month') {
     $('#month-input').value = state.month;
     renderMonthly({ ...ctx, ym: state.month });
@@ -486,7 +545,7 @@ function renderStats() {
 // Una fila por etiqueta: total, nº de gastos, fechas y la categoría con más gasto.
 function renderTagsTable() {
   const groups = new Map();
-  for (const e of state.expenses) {
+  for (const e of expensesOnly()) {
     if (!e.tag) continue;
     if (!groups.has(e.tag)) groups.set(e.tag, []);
     groups.get(e.tag).push(e);
@@ -634,7 +693,8 @@ function renderCatSettings() {
   const counts = {};
   state.expenses.forEach((e) => { counts[e.category] = (counts[e.category] || 0) + 1; });
   // Renombrar/Eliminar quedan detrás de cada fila y aparecen al deslizar a la izquierda.
-  $('#cat-list').innerHTML = state.categories.map((c) => `
+  $$('#cat-type button').forEach((b) => b.classList.toggle('active', b.dataset.catType === state.catType));
+  $('#cat-list').innerHTML = catsOfType(state.catType).map((c) => `
     <li class="swipe" data-name="${esc(c.name)}">
       <div class="swipe-actions">
         <button type="button" class="swipe-edit" data-swipe="rename" tabindex="-1">Renombrar</button>
@@ -643,7 +703,7 @@ function renderCatSettings() {
       <div class="cat-row swipe-front">
         <input type="color" value="${c.color}" data-act="color" aria-label="Color de ${esc(c.name)}">
         <span class="cat-name">${esc(c.name)}</span>
-        <span class="count">${counts[c.name] || 0} ${counts[c.name] === 1 ? 'gasto' : 'gastos'}</span>
+        <span class="count">${counts[c.name] || 0} ${c.type === 'income' ? 'ingreso' : 'gasto'}${counts[c.name] === 1 ? '' : 's'}</span>
       </div>
     </li>`).join('');
 }
@@ -661,14 +721,16 @@ async function renameCategoryFlow(name) {
 }
 
 async function deleteCategoryFlow(name) {
-  if (state.categories.length <= 1) return toast('Debe quedar al menos una categoría', 'error');
+  const type = state.categories.find((c) => c.name === name)?.type || 'expense';
+  const sameType = catsOfType(type);
+  if (sameType.length <= 1) return toast(`Debe quedar al menos una categoría de ${type === 'income' ? 'ingreso' : 'gasto'}`, 'error');
   const count = state.expenses.filter((e) => e.category === name).length;
   let target = null;
   if (count) {
     target = await ask({
       title: `Eliminar «${name}»`,
-      message: `Tiene ${count} gasto(s). ¿A qué categoría quieres moverlos?`,
-      select: { options: state.categories.filter((c) => c.name !== name).map((c) => c.name) },
+      message: `Tiene ${count} movimiento(s). ¿A qué categoría quieres moverlos?`,
+      select: { options: sameType.filter((c) => c.name !== name).map((c) => c.name) },
       okText: 'Mover y eliminar', danger: true,
     });
     if (!target) return;
@@ -688,6 +750,11 @@ function setupCategorySettings() {
     await loadData();
   });
 
+  $$('#cat-type button').forEach((b) => b.addEventListener('click', () => {
+    state.catType = b.dataset.catType;
+    renderCatSettings();
+  }));
+
   setupSwipe(list, (action, li) => {
     if (action === 'rename') renameCategoryFlow(li.dataset.name);
     else deleteCategoryFlow(li.dataset.name);
@@ -699,7 +766,7 @@ function setupCategorySettings() {
     const name = form.elements.name.value.trim();
     if (!name) return toast('Escribe un nombre', 'error');
     if (nameTaken(name)) return toast('Ya existe una categoría con ese nombre', 'error');
-    await db.addCategory(name, form.elements.color.value);
+    await db.addCategory(name, form.elements.color.value, state.catType);
     form.elements.name.value = '';
     toast('Categoría añadida');
     await loadData();
@@ -767,7 +834,7 @@ function setupBackup() {
         okText: 'Importar',
       });
       if (!ok) return;
-      await db.ensureCategories(records.map((r) => r.category));
+      await db.ensureCategories(records);
       const r = await db.mergeExpenses(records, { fromServer: false });
       toast(`Importado: ${r.added} nuevos, ${r.updated} actualizados`);
       await afterChange();
@@ -936,8 +1003,10 @@ async function init() {
 
   setupAddForm();
   setupCalculator($('#add-form'));
+  setupTypeToggle($('#add-form'));
   setupEditDialog();
   setupCalculator($('#edit-form'));
+  setupTypeToggle($('#edit-form'));
   setupStats();
   setupCategorySettings();
   setupBackup();

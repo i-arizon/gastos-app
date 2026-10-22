@@ -1,6 +1,8 @@
 // db.js — Capa de datos local en IndexedDB (fuente de verdad de la app).
-// Stores: expenses (gastos), categories, queue (cambios pendientes de sincronizar), settings.
-// Un gasto: { id, date, name, amount, category, tag, createdAt, updatedAt, deleted }; tag puede ser ''.
+// Stores: expenses (movimientos: gastos e ingresos), categories, queue (cambios pendientes), settings.
+// Un movimiento: { id, type, date, name, amount, category, tag, createdAt, updatedAt, deleted }
+//   type: 'expense' | 'income' (los antiguos sin type son gastos); amount siempre positivo; tag puede ser ''.
+// Una categoría: { name, color, order, type }; el nombre es único entre gastos e ingresos.
 import { uuid } from './utils.js';
 
 const DB_NAME = 'gastos-db';
@@ -12,6 +14,11 @@ export const DEFAULT_CATEGORIES = [
   ['Deporte', '#65a30d'], ['Salud', '#dc2626'], ['Compras', '#ca8a04'],
   ['Viajes', '#0d9488'], ['Suscripciones', '#4f46e5'], ['Otros', '#64748b'],
 ];
+export const DEFAULT_INCOME_CATEGORIES = [
+  ['Nómina', '#15803d'], ['Extra / Bonus', '#0e7490'], ['Bizum recibido', '#0891b2'],
+  ['Reembolsos', '#65a30d'], ['Intereses', '#ca8a04'], ['Ventas', '#7c3aed'], ['Otros ingresos', '#64748b'],
+];
+export const typeOf = (x) => (x?.type === 'income' ? 'income' : 'expense');
 // Colores para categorías nuevas o importadas.
 const EXTRA_COLORS = ['#e11d48', '#0284c7', '#9333ea', '#ea580c', '#059669', '#a16207', '#be185d', '#475569'];
 
@@ -76,6 +83,7 @@ export async function saveExpense(data) {
   const ts = now();
   const exp = {
     id: data.id || uuid(),
+    type: typeOf(data),
     date: data.date,
     name: data.name.trim(),
     amount: data.amount,
@@ -153,22 +161,33 @@ export const dequeue = (entries) => run('queue', 'readwrite', (q) => {
 });
 
 /* ---------- Categorías ---------- */
+// Devuelve todas las categorías (gastos e ingresos) con su type.
 export async function getCategories() {
   if (!(await getSetting('seeded', false))) {
     await run('categories', 'readwrite', (s) => {
-      DEFAULT_CATEGORIES.forEach(([name, color], order) => s.put({ name, color, order }));
+      DEFAULT_CATEGORIES.forEach(([name, color], order) => s.put({ name, color, order, type: 'expense' }));
     });
     await setSetting('seeded', true);
   }
+  // Categorías de ingreso: se crean una vez (también en instalaciones anteriores a los ingresos).
+  if (!(await getSetting('seededIncome', false))) {
+    const existing = new Set((await run('categories', 'readonly', (s) => s.getAll())).map((c) => c.name));
+    await run('categories', 'readwrite', (s) => {
+      DEFAULT_INCOME_CATEGORIES.forEach(([name, color], i) => {
+        if (!existing.has(name)) s.put({ name, color, order: 1000 + i, type: 'income' });
+      });
+    });
+    await setSetting('seededIncome', true);
+  }
   const cats = await run('categories', 'readonly', (s) => s.getAll());
-  return cats.sort((a, b) => a.order - b.order);
+  return cats.map((c) => ({ ...c, type: typeOf(c) })).sort((a, b) => a.order - b.order);
 }
 
-export async function addCategory(name, color) {
+export async function addCategory(name, color, type = 'expense') {
   const cats = await getCategories();
   const order = cats.reduce((m, c) => Math.max(m, c.order), -1) + 1;
   color = color || EXTRA_COLORS[cats.length % EXTRA_COLORS.length];
-  await run('categories', 'readwrite', (s) => { s.put({ name, color, order }); });
+  await run('categories', 'readwrite', (s) => { s.put({ name, color, order, type }); });
 }
 
 export async function updateCategoryColor(name, color) {
@@ -177,7 +196,7 @@ export async function updateCategoryColor(name, color) {
   if (cat) await run('categories', 'readwrite', (s) => { s.put({ ...cat, color }); });
 }
 
-// Cambia la categoría de todos los gastos activos de `from` a `to`.
+// Cambia la categoría de todos los movimientos activos de `from` a `to`.
 async function moveExpenses(from, to) {
   const ts = now();
   const affected = (await getAllExpenses())
@@ -203,10 +222,13 @@ export async function deleteCategory(name, reassignTo) {
   return moved;
 }
 
-// Crea las categorías que aparezcan en gastos importados y no existan.
-export async function ensureCategories(names) {
+// Crea las categorías que aparezcan en movimientos importados y no existan (con su tipo).
+export async function ensureCategories(movements) {
   const existing = new Set((await getCategories()).map((c) => c.name));
-  for (const n of new Set(names)) {
-    if (n && !existing.has(n)) await addCategory(n);
+  for (const m of movements) {
+    if (m.category && !existing.has(m.category)) {
+      await addCategory(m.category, null, typeOf(m));
+      existing.add(m.category);
+    }
   }
 }

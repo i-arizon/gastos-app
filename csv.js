@@ -1,7 +1,7 @@
 // csv.js — Exportación/importación CSV (separador ";" y UTF-8 con BOM para Excel en español).
 import { fmtDate, isISODate, normalizeText, parseAmount, uuid } from './utils.js';
 
-const HEADER = ['id', 'fecha', 'nombre', 'importe', 'categoria', 'etiqueta', 'creado', 'actualizado'];
+const HEADER = ['id', 'tipo', 'fecha', 'nombre', 'importe', 'categoria', 'etiqueta', 'creado', 'actualizado'];
 
 function cell(v) {
   const s = String(v ?? '');
@@ -11,7 +11,7 @@ function cell(v) {
 export function toCSV(list) {
   const lines = [HEADER.join(';')];
   for (const e of list) {
-    lines.push([e.id, fmtDate(e.date), e.name, e.amount.toFixed(2).replace('.', ','),
+    lines.push([e.id, e.type === 'income' ? 'ingreso' : 'gasto', fmtDate(e.date), e.name, e.amount.toFixed(2).replace('.', ','),
       e.category, e.tag || '', e.createdAt, e.updatedAt].map(cell).join(';'));
   }
   return '﻿' + lines.join('\r\n') + '\r\n';
@@ -43,6 +43,7 @@ function parseRows(text) {
 
 const ALIASES = {
   id: ['id'],
+  type: ['tipo', 'type'],
   date: ['fecha', 'date'],
   name: ['nombre', 'name', 'concepto'],
   amount: ['importe', 'amount', 'cantidad'],
@@ -83,6 +84,7 @@ export function parseCSV(text) {
     records.push({
       id: get('id') || uuid(),
       date, name, amount,
+      type: /^(ingreso|income)$/i.test(get('type')) ? 'income' : 'expense',
       category: get('category') || 'Otros',
       tag: get('tag'),
       createdAt: get('createdAt') || ts,

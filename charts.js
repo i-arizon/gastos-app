@@ -1,6 +1,6 @@
 // charts.js — Cálculos y gráficos de la pestaña Análisis (Chart.js cargado como global UMD).
 import {
-  fmtEUR, fmtNum, fmtPct, fmtSigned, fmtDate, MONTHS, MONTHS_SHORT, monthLabel, shiftMonth,
+  fmtEUR, fmtPct, fmtSigned, fmtDate, MONTHS, MONTHS_SHORT, monthLabel, shiftMonth,
   daysInMonth, currentYM, currentYear, todayISO, escapeHTML as esc, sum,
 } from './utils.js';
 
@@ -57,10 +57,22 @@ function kpi(label, value, sub = '', wide = false) {
 // Suma los primeros n meses de un array de 12.
 const sumMonths = (perMonth, n) => perMonth.slice(0, n).reduce((a, b) => a + b, 0);
 
+// Resumen tipo extracto: ingresos, gastos y diferencia (con % sobre los ingresos).
+function balanceCard(title, income, expense, diffLabel) {
+  const diff = income - expense;
+  const cls = diff > 0 ? 'down' : diff < 0 ? 'up' : '';
+  const pct = income ? ` <span class="b-pct">(${fmtSigned((diff / income) * 100, fmtPct)})</span>` : '';
+  return `<h3>${title}</h3>
+    <div class="b-row"><span>Ingresos</span><span class="amount-income">+${fmtEUR(income)}</span></div>
+    <div class="b-row"><span>Gastos</span><span>−${fmtEUR(expense)}</span></div>
+    <div class="b-row b-total"><span>${diffLabel}</span><span class="${cls}">${fmtSigned(diff)}${pct}</span></div>
+    ${income ? '' : '<p class="muted small">Sin ingresos en este periodo: el % se calcula sobre los ingresos.</p>'}`;
+}
+
 const swatch = (color) => `<span class="swatch" style="background:${color}"></span>`;
 
 /* ======================= Vista mensual ======================= */
-export function renderMonthly({ expenses, colorOf, ym }) {
+export function renderMonthly({ expenses, incomes = [], colorOf, ym }) {
   const prevYM = shiftMonth(ym, -1);
   const cur = expenses.filter((e) => e.date.startsWith(ym));
   const prev = expenses.filter((e) => e.date.startsWith(prevYM));
@@ -75,9 +87,10 @@ export function renderMonthly({ expenses, colorOf, ym }) {
     ? `<span class="${cls}">${fmtSigned(diff)}${pct !== null ? ` (${fmtSigned(pct, fmtPct)})` : ''}</span>`
     : '—';
   const days = ym === currentYM() ? Number(todayISO().slice(8)) : daysInMonth(ym);
+  const income = sum(incomes.filter((e) => e.date.startsWith(ym)));
+  $('m-balance').innerHTML = balanceCard(monthLabel(ym), income, total, 'Diferencia');
   $('m-kpis').innerHTML =
-    kpi(`Total ${monthLabel(ym).toLowerCase()}`, fmtEUR(total), `${cur.length} gasto${cur.length === 1 ? '' : 's'}`, true) +
-    kpi(`vs ${monthLabel(prevYM).toLowerCase()}`, variation, `Mes anterior: ${fmtEUR(prevTotal)}`) +
+    kpi(`Gasto vs ${monthLabel(prevYM).toLowerCase()}`, variation, `Mes anterior: ${fmtEUR(prevTotal)} · ${cur.length} gasto${cur.length === 1 ? '' : 's'} este mes`) +
     kpi('Media diaria', fmtEUR(ym > currentYM() ? 0 : total / days), `Sobre ${days} días`);
 
   // Donut + ranking por categoría
@@ -160,7 +173,7 @@ export function renderMonthly({ expenses, colorOf, ym }) {
 }
 
 /* ======================= Vista anual ======================= */
-export function renderAnnual({ expenses, categories, colorOf, year }) {
+export function renderAnnual({ expenses, incomes = [], categories, colorOf, year }) {
   const list = expenses.filter((e) => e.date.startsWith(`${year}-`));
   const total = sum(list);
 
@@ -186,9 +199,10 @@ export function renderAnnual({ expenses, categories, colorOf, year }) {
     : completed ? `Sobre ${completed} ${completed === 1 ? 'mes completo' : 'meses completos'}`
     : 'Mes en curso (aún no hay meses completos)';
 
+  const income = sum(incomes.filter((e) => e.date.startsWith(`${year}-`)));
+  $('y-balance').innerHTML = balanceCard(`Año ${year}`, income, total, 'Ahorro');
   $('y-kpis').innerHTML =
-    kpi(`Total ${year}`, fmtEUR(total), `${list.length} gasto${list.length === 1 ? '' : 's'}`, true) +
-    kpi('Media mensual', fmtEUR(avg), avgLabel) +
+    kpi('Gasto medio mensual', fmtEUR(avg), avgLabel) +
     kpi('Mes con más gasto', total ? MONTHS[maxMonth] : '—', total ? fmtEUR(monthly[maxMonth]) : '');
 
   const t = theme();
@@ -202,25 +216,6 @@ export function renderAnnual({ expenses, categories, colorOf, year }) {
       maintainAspectRatio: false,
       scales: { y: axisEUR, x: xMonths },
       plugins: { legend: { display: false }, tooltip: tooltipEUR },
-    },
-  });
-
-  // Barras apiladas por categoría
-  draw('ch-year-stacked', {
-    type: 'bar',
-    data: {
-      labels: MONTHS_SHORT,
-      datasets: byCat.map((c) => ({
-        label: c.name, data: matrix.get(c.name), backgroundColor: colorOf(c.name), stack: 'total',
-      })),
-    },
-    options: {
-      maintainAspectRatio: false,
-      scales: { y: { ...axisEUR, stacked: true }, x: { ...xMonths, stacked: true } },
-      plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true, font: { size: 11 } } },
-        tooltip: { ...tooltipEUR, filter: (item) => item.parsed.y > 0 },
-      },
     },
   });
 
@@ -266,13 +261,4 @@ export function renderAnnual({ expenses, categories, colorOf, year }) {
     },
   });
   drawEvolution();
-
-  // Matriz mes × categoría
-  const cell = (v, cls = '') => `<td class="${v ? cls : `zero ${cls}`}">${v ? fmtNum(v, 0) : '–'}</td>`;
-  $('y-matrix').innerHTML = byCat.length ? `
-    <thead><tr><th>Categoría</th>${MONTHS_SHORT.map((m) => `<th>${m}</th>`).join('')}<th>Total</th></tr></thead>
-    <tbody>${byCat.map((c) => `<tr><td>${swatch(colorOf(c.name))}${esc(c.name)}</td>
-      ${matrix.get(c.name).map((v) => cell(v)).join('')}${cell(c.total, 'total-col')}</tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total</td>${monthly.map((v) => cell(v)).join('')}${cell(total, 'total-col')}</tr></tfoot>`
-    : '<tbody><tr><td class="muted">No hay gastos este año</td></tr></tbody>';
 }

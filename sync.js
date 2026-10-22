@@ -137,6 +137,7 @@ function normalizeRemote(r) {
     date: String(r.date).slice(0, 10),
     name: String(r.name ?? ''),
     amount: Math.round(Number(String(r.amount).replace(',', '.')) * 100) / 100 || 0,
+    type: r.type === 'income' ? 'income' : 'expense',
     category: String(r.category ?? 'Otros'),
     tag: String(r.tag ?? '').trim(),
     createdAt: String(r.createdAt || r.updatedAt || ''),
@@ -152,7 +153,7 @@ export async function restore() {
   const data = await read(url, token, 'list');
   const remote = (data.expenses || []).map(normalizeRemote).filter(Boolean);
   const result = await db.mergeExpenses(remote, { fromServer: true });
-  await db.ensureCategories(remote.filter((e) => !e.deleted).map((e) => e.category));
+  await db.ensureCategories(remote.filter((e) => !e.deleted));
   syncNow();
   return { ...result, total: remote.length };
 }
